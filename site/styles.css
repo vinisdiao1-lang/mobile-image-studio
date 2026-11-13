@@ -26,14 +26,16 @@ button:disabled { cursor: default; opacity: .46; }
 .top-inner { display: flex; justify-content: space-between; align-items: center; max-width: 1136px; margin: auto; min-height: 63px; padding: 0 24px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 780; text-decoration: none; }
 .top-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
-.balance-button, .dashboard-link { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--inset); color: var(--accent-dark); font-size: 13px; font-weight: 620; text-decoration: none; }
-.dashboard-link:hover { border-color: var(--accent); }
+.balance-button { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; padding: 0 10px; background: var(--inset); color: var(--accent-dark); font-size: 13px; font-weight: 620; }
 .balance-button strong { font-variant-numeric: tabular-nums; }
 .balance-button[data-error] strong { color: #9b322c; }
-.dashboard-key { margin-bottom: 14px; padding: 11px; border-radius: 10px; background: var(--inset); }
-.dashboard-key p { margin-bottom: 7px; }
-.dashboard-key p:empty { display: none; }
-#copy-key-status { margin: 5px 0 0; }
+.view-switch { display: flex; gap: 6px; max-width: 1136px; margin: auto; padding: 10px 24px 0; }
+.view-switch button { min-height: 42px; font-size: 14px; font-weight: 680; }
+.view-switch button[aria-pressed="true"] { color: white; background: var(--accent); border-color: var(--accent); }
+.dashboard-view { max-width: 1136px; margin: auto; padding: 12px 24px; }
+.dashboard-status { margin: 8px 0; color: var(--muted); font-size: 14px; }
+.dashboard-status:empty { display: none; }
+.dashboard-frame { display: block; width: 100%; height: max(460px, calc(100dvh - 134px)); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .key-button { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 620; }
 .key-dot { width: 7px; height: 7px; border-radius: 50%; background: #6187b4; }
 .key-button[data-ready] .key-dot { background: #278457; }
@@ -135,6 +137,7 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
 #image-dialog { width: min(900px, calc(100% - 24px)); }
 #preview-image { display: block; width: 100%; max-height: 76vh; object-fit: contain; border-radius: 9px; background: var(--inset); }
 @media (max-width: 660px) {
+  .view-switch, .dashboard-view { padding-inline: 12px; }
   .top-inner { min-height: 56px; padding-inline: 13px; }
   .workspace { padding: 12px 12px 28px; gap: 9px; }
   .gallery { --gap: 8px; }

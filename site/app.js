@@ -2,9 +2,13 @@ import { creditLabel, generationRequest, isTaskId, maxReferenceBytes, maxReferen
 
 const remoteApi = 'https://new.linlangai88.cn/mobile-image-api/';
 const apiBase = location.hostname === '127.0.0.1' ? '/mobile-image-api/' : remoteApi;
+const keyStorage = 'mobile-image-studio.api-key';
 const $ = (id) => document.getElementById(id);
 let key = '';
 let afterKey;
+let dashboardFrame;
+let dashboardChannel;
+let dashboardTimer;
 let balanceRequest;
 let lastBalance;
 const pointFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
@@ -40,18 +44,94 @@ function syncCredits() {
   $('model-credits').textContent = creditLabel(model, $('quality').value);
 }
 
-function setKey(value) {
+function setKey(value, persist = true) {
+  if (persist) {
+    try {
+      if (value) localStorage.setItem(keyStorage, value);
+      else localStorage.removeItem(keyStorage);
+      $('key-storage-status').textContent = '';
+    } catch {
+      $('key-storage-status').textContent = '浏览器无法写入本地存储，刷新后可能需要重新设置 Key。';
+    }
+  }
   if (value !== key) {
     balanceRequest?.abort();
     balanceRequest = undefined;
     lastBalance = undefined;
+    closeDashboardFrame();
   }
   key = value;
   $('open-key').toggleAttribute('data-ready', Boolean(value));
   $('key-label').textContent = value ? 'API Key 已设置' : '设置 API Key';
-  $('dashboard-key').hidden = !value;
   renderBalance(lastBalance ?? (value ? '查询中…' : '—'));
   if (value) refreshBalance();
+  if (!$('dashboard-view').hidden) openDashboardFrame();
+}
+
+function closeDashboardFrame() {
+  dashboardChannel?.close();
+  dashboardChannel = undefined;
+  dashboardFrame?.remove();
+  dashboardFrame = undefined;
+  clearTimeout(dashboardTimer);
+}
+
+function openDashboardFrame() {
+  if (!key || dashboardFrame) return;
+  const boardOrigin = 'https://task.imagesave.cn';
+  // The board accepts its desktop client's protocol from an opaque parent.
+  // The isolated relay passes credentials only to the board's exact HTTPS origin.
+  const relay = `<!doctype html><html lang="zh-CN">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block}</style>
+    <iframe title="任务中心"></iframe>
+    <script>
+      const boardOrigin = ${JSON.stringify(boardOrigin)};
+      const board = document.querySelector('iframe');
+      const channel = new MessageChannel();
+      let apiKey, requested = false;
+      function authenticate() {
+        if (!requested || !apiKey) return;
+        board.contentWindow.postMessage({source:'aiwork-client',type:'auth-response',version:1,apiKey},boardOrigin);
+        channel.port1.postMessage('board-connected');
+      }
+      channel.port1.onmessage = ({data}) => {
+        if (typeof data !== 'string') return;
+        apiKey = data;
+        authenticate();
+      };
+      window.addEventListener('message', (event) => {
+        const data = event.data;
+        if (event.origin !== boardOrigin || event.source !== board.contentWindow ||
+            data?.source !== 'task-dashboard' || data.type !== 'auth-request' || data.version !== 1) return;
+        requested = true;
+        authenticate();
+      });
+      window.parent.postMessage('dashboard-channel', ${JSON.stringify(location.origin)}, [channel.port2]);
+      board.src = boardOrigin + '/';
+    </script></html>`;
+  dashboardFrame = document.createElement('iframe');
+  dashboardFrame.className = 'dashboard-frame';
+  dashboardFrame.title = '任务看板';
+  dashboardFrame.referrerPolicy = 'no-referrer';
+  dashboardFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox');
+  dashboardFrame.src = 'data:text/html;charset=utf-8,' + encodeURIComponent(relay);
+  $('dashboard-status').textContent = '正在加载任务看板…';
+  $('dashboard-frame-host').append(dashboardFrame);
+  dashboardTimer = setTimeout(() => {
+    $('dashboard-status').textContent = '任务看板连接较慢。可切回生图，再打开看板重试。';
+    closeDashboardFrame();
+  }, 18000);
+}
+
+function switchView(showDashboard) {
+  if (showDashboard && !key) return openKey(() => switchView(true));
+  $('studio-view').hidden = showDashboard;
+  $('dashboard-view').hidden = !showDashboard;
+  $('show-studio').setAttribute('aria-pressed', String(!showDashboard));
+  $('show-dashboard').setAttribute('aria-pressed', String(showDashboard));
+  if (showDashboard) openDashboardFrame();
+  refreshBalance();
 }
 
 function renderBalance(value, error = '') {
@@ -462,6 +542,26 @@ document.addEventListener('drop', (event) => {
   if (composer.contains(event.target)) addReferenceFiles([...event.dataTransfer.files]);
 });
 $('open-key').addEventListener('click', () => openKey());
+$('show-studio').addEventListener('click', () => switchView(false));
+$('show-dashboard').addEventListener('click', () => switchView(true));
+window.addEventListener('message', (event) => {
+  if (!dashboardFrame || dashboardChannel || event.source !== dashboardFrame.contentWindow ||
+      event.origin !== 'null' || event.data !== 'dashboard-channel' || event.ports.length !== 1) return;
+  const port = event.ports[0];
+  dashboardChannel = port;
+  port.onmessage = ({ data }) => {
+    if (dashboardChannel !== port || data !== 'board-connected') return;
+    clearTimeout(dashboardTimer);
+    $('dashboard-status').textContent = '';
+    refreshBalance();
+  };
+  port.postMessage(key);
+});
+window.addEventListener('storage', (event) => {
+  if (event.storageArea !== localStorage || (event.key !== keyStorage && event.key !== null)) return;
+  setKey(event.newValue || '', false);
+  if (!key) switchView(false);
+});
 $('balance-refresh').addEventListener('click', () => withKey(refreshBalance));
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refreshBalance();
@@ -469,27 +569,15 @@ document.addEventListener('visibilitychange', () => {
 setInterval(() => {
   if (!document.hidden) refreshBalance();
 }, 20000);
-$('copy-key').addEventListener('click', async () => {
-  if (!key) return;
-  try {
-    await navigator.clipboard.writeText(key);
-    $('copy-key-status').textContent = '已复制，请到任务看板粘贴。';
-  } catch {
-    $('api-key').value = key;
-    $('api-key').focus();
-    $('api-key').select();
-    $('copy-key-status').textContent = '浏览器未允许自动复制，请手动复制已选中的 Key。';
-  }
-});
 $('close-key').addEventListener('click', () => $('key-dialog').close());
 $('clear-key').addEventListener('click', () => {
   setKey('');
+  switchView(false);
   $('key-dialog').close();
 });
 $('key-dialog').addEventListener('close', () => {
   afterKey = undefined;
   $('api-key').value = '';
-  $('copy-key-status').textContent = '';
 });
 $('key-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -505,6 +593,12 @@ $('key-form').addEventListener('submit', (event) => {
   callback?.();
 });
 $('api-key').addEventListener('input', () => $('api-key').setCustomValidity(''));
+try {
+  const savedKey = localStorage.getItem(keyStorage);
+  if (savedKey && /^[!-~]{1,512}$/.test(savedKey)) setKey(savedKey, false);
+} catch {
+  $('key-storage-status').textContent = '浏览器无法读取本地存储，刷新后可能需要重新设置 Key。';
+}
 composer.addEventListener('submit', (event) => {
   event.preventDefault();
   if (preparingReferences) return;
