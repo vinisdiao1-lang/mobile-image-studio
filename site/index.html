@@ -3,79 +3,107 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#121318">
+  <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
-  <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=3">
+  <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=4">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"> 密码象</a>
-    <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
-  </header>
-  <main>
-    <div class="intro">
-      <h1>AI 生图<span>.</span></h1>
-      <p>写下你想看到的画面，或用参考图指定方向。</p>
+    <div class="top-inner">
+      <a class="brand" href="./"><img src="./icon.svg?v=4" alt="" width="34" height="34">密码象</a>
+      <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
     </div>
-    <div class="workspace">
-      <form id="create" class="panel composer">
-        <h2>创作设置</h2>
-        <label for="prompt">提示词</label>
-        <div class="prompt-box">
-          <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
-          <div class="prompt-actions"><button id="example-button" type="button" class="link">试用示例提示词</button><output id="count" for="prompt">0 / 8000</output></div>
+  </header>
+  <main class="workspace">
+    <section class="result" aria-labelledby="result-title">
+      <div class="gallery-heading">
+        <div class="section-title"><h1 id="result-title">创作记录</h1><span id="result-badge" role="status">暂无任务</span></div>
+        <div class="gallery-arrows" aria-label="图库翻页">
+          <button id="gallery-prev" type="button" aria-label="上一组图片" aria-controls="gallery" disabled>‹</button>
+          <button id="gallery-next" type="button" aria-label="下一组图片" aria-controls="gallery" disabled>›</button>
         </div>
-        <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
-        <select id="model"></select>
-        <div class="settings">
+      </div>
+      <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可左右滚动">
+        <figure class="sample-card" data-placeholder>
+          <button id="sample-preview" class="thumbnail" type="button" aria-label="查看示例图：山湖暮光">
+            <img src="./example.jpg" width="1200" height="800" alt="暮色中的火山湖倒映铜色霞光">
+            <span class="zoom" aria-hidden="true">↗</span>
+          </button>
+          <figcaption><strong>山湖暮光</strong><span>示例图</span></figcaption>
+        </figure>
+        <div class="empty-card" data-placeholder>
+          <span class="empty-icon" aria-hidden="true">✦</span>
+          <p>生成的图片会显示在这里</p>
+        </div>
+      </div>
+      <div class="gallery-controls">
+        <input id="gallery-slider" type="range" min="0" max="1" value="0" disabled aria-label="拖动浏览创作记录" aria-controls="gallery">
+        <output id="gallery-position" for="gallery-slider" hidden></output>
+      </div>
+      <details class="resume">
+        <summary>查询已有任务</summary>
+        <form id="resume">
+          <label for="resume-id">任务 ID</label>
+          <div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div>
+          <p class="notice" id="resume-note" role="status"></p>
+        </form>
+      </details>
+    </section>
+    <form id="create" class="composer" aria-labelledby="composer-title">
+      <div class="composer-heading"><h2 id="composer-title">图片生成</h2></div>
+      <div class="prompt-box">
+        <label for="prompt">提示词</label>
+        <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
+        <div class="prompt-actions"><button id="example-button" type="button" class="link">试用示例提示词</button><output id="count" for="prompt">0 / 8000</output></div>
+      </div>
+      <div class="composer-footer">
+        <div class="toolbar">
+          <div class="model-field">
+            <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
+            <select id="model"></select>
+          </div>
           <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
           <div><label for="size">分辨率</label><select id="size"></select></div>
           <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
+          <button class="primary" id="generate" type="submit"><span aria-hidden="true">↑</span> 生成图片</button>
         </div>
         <details class="references">
           <summary>参考图链接 <span>可选</span></summary>
           <label for="references">每行一个公网 HTTP(S) 图片链接，最多 6 张</label>
           <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
         </details>
-        <button class="primary" id="generate" type="submit"><span aria-hidden="true">✦</span> 生成图片</button>
         <p class="notice" id="form-note" role="status"></p>
-        <a class="task-shortcut" id="task-shortcut" href="#result-title" hidden></a>
-      </form>
-      <section class="panel result" aria-labelledby="result-title">
-        <div class="panel-heading"><h2 id="result-title">生图任务</h2><span id="result-badge">示例图</span></div>
-        <figure id="sample">
-          <img src="./example.jpg" width="1200" height="800" alt="暮色中的火山湖倒映铜色霞光，远处山间有薄雾和一轮月亮">
-          <figcaption>山湖暮光</figcaption>
-        </figure>
-        <ol id="tasks" class="tasks" hidden></ol>
-        <details class="resume">
-          <summary>查询已有任务</summary>
-          <form id="resume"><label for="resume-id">任务 ID</label><div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div><p class="notice" id="resume-note" role="status"></p></form>
-        </details>
-      </section>
-    </div>
+      </div>
+    </form>
   </main>
   <template id="task-template">
-    <li class="task">
-      <div class="task-heading"><h3></h3><span class="task-state"></span></div>
-      <p class="task-settings" hidden></p>
-      <p class="task-status" role="status"></p>
-      <p class="task-id" hidden></p>
-      <button class="poll-again" type="button" hidden>继续查询</button>
-      <div class="images" hidden></div>
-    </li>
+    <article class="task">
+      <div class="task-placeholder"><span aria-hidden="true">✦</span><span class="task-state"></span></div>
+      <div class="task-content">
+        <h3></h3>
+        <p class="task-settings" hidden></p>
+        <p class="task-status" role="status"></p>
+        <p class="task-id" hidden></p>
+        <button class="poll-again" type="button" hidden>继续查询</button>
+        <div class="image-actions" hidden></div>
+      </div>
+    </article>
   </template>
-  <dialog id="key-dialog">
+  <dialog id="image-dialog" aria-labelledby="preview-title">
+    <div class="panel-heading"><h2 id="preview-title">图片预览</h2><button id="close-preview" type="button" aria-label="关闭预览">×</button></div>
+    <img id="preview-image" alt="" referrerpolicy="no-referrer">
+  </dialog>
+  <dialog id="key-dialog" aria-labelledby="key-title">
     <form id="key-form">
-      <div class="panel-heading"><h2>API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
+      <div class="panel-heading"><h2 id="key-title">API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
       <p>Key 仅保存在当前页面，用于通过 HTTPS 提交和查询任务。</p>
       <label for="api-key">API Key</label>
       <input id="api-key" type="password" maxlength="512" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入你的 API Key">
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=3"></script>
+  <script type="module" src="./app.js?v=4"></script>
 </body>
 </html>

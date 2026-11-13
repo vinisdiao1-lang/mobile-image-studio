@@ -10,6 +10,8 @@ const tasks = [];
 const qualityLabels = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
 const successStatuses = ['succeeded', 'completed', 'success'];
 const failureStatuses = ['failed', 'not_found', 'uncertain', 'canceled', 'cancelled'];
+const gallery = $('gallery');
+const slider = $('gallery-slider');
 
 function options(select, items, preferred) {
   const previous = select.value;
@@ -56,7 +58,39 @@ function syncPrompt() {
 function updateTaskCount() {
   const active = tasks.filter((task) => task.running).length;
   $('result-badge').textContent = active ? active + ' 个进行中 / ' + tasks.length + ' 个任务' : tasks.length + ' 个任务';
-  $('task-shortcut').textContent = '查看生图任务（' + (active ? active + ' 个进行中' : tasks.length + ' 个') + '）↓';
+}
+
+function galleryStep() {
+  const [first, second] = gallery.children;
+  return second ? second.getBoundingClientRect().left - first.getBoundingClientRect().left : 1;
+}
+
+function syncGallery() {
+  const count = gallery.children.length;
+  const max = Math.max(0, count - 2);
+  const index = Math.min(max, Math.max(0, Math.round(gallery.scrollLeft / galleryStep())));
+  slider.max = String(max || 1);
+  slider.value = String(index);
+  slider.disabled = max === 0;
+  $('gallery-prev').disabled = index === 0;
+  $('gallery-next').disabled = index === max;
+  const position = (index + 1) + '–' + Math.min(count, index + 2) + ' / ' + count;
+  $('gallery-position').hidden = max === 0;
+  $('gallery-position').textContent = position;
+  slider.setAttribute('aria-valuetext', position);
+}
+
+function moveGallery(index, behavior = 'instant') {
+  const max = Math.max(0, gallery.children.length - 2);
+  gallery.scrollTo({ left: Math.min(max, Math.max(0, index)) * galleryStep(), behavior });
+  syncGallery();
+}
+
+function showPreview(url, alt) {
+  const image = $('preview-image');
+  image.alt = alt;
+  image.src = url;
+  $('image-dialog').showModal();
 }
 
 function addTask(title, settings) {
@@ -67,19 +101,21 @@ function addTask(title, settings) {
     state: node.querySelector('.task-state'),
     taskId: node.querySelector('.task-id'),
     retry: node.querySelector('.poll-again'),
-    images: node.querySelector('.images'),
+    placeholder: node.querySelector('.task-placeholder'),
+    actions: node.querySelector('.image-actions'),
     running: false,
   };
-  node.querySelector('h3').textContent = title;
+  const heading = node.querySelector('h3');
+  heading.textContent = title;
+  heading.title = title;
   const meta = node.querySelector('.task-settings');
   meta.textContent = settings || '';
   meta.hidden = !settings;
   task.retry.addEventListener('click', () => withKey(() => runPoll(task, key)));
+  if (!tasks.length) gallery.querySelectorAll('[data-placeholder]').forEach((item) => item.remove());
   tasks.push(task);
-  $('tasks').prepend(node);
-  $('sample').hidden = true;
-  $('tasks').hidden = false;
-  $('task-shortcut').hidden = false;
+  gallery.prepend(node);
+  moveGallery(0);
   return task;
 }
 
@@ -116,51 +152,82 @@ async function callApi(path, payload, currentKey) {
   return data;
 }
 
+function imageCardParts(task, url, index) {
+  const thumbnail = document.createElement('button');
+  thumbnail.type = 'button';
+  thumbnail.className = 'thumbnail';
+  thumbnail.setAttribute('aria-label', '预览生成结果 ' + (index + 1));
+  const image = new Image();
+  image.alt = '生成结果 ' + (index + 1);
+  image.loading = 'lazy';
+  image.referrerPolicy = 'no-referrer';
+  image.src = url;
+  const zoom = document.createElement('span');
+  zoom.className = 'zoom';
+  zoom.setAttribute('aria-hidden', 'true');
+  zoom.textContent = '↗';
+  thumbnail.append(image, zoom);
+  thumbnail.addEventListener('click', () => showPreview(url, image.alt));
+  const original = document.createElement('a');
+  original.textContent = '打开原图 ↗';
+  original.href = url;
+  original.target = '_blank';
+  original.rel = 'noopener noreferrer';
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.textContent = '下载';
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    try {
+      const response = await fetch(url, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error('下载失败');
+      const blob = await response.blob();
+      const download = document.createElement('a');
+      const objectUrl = URL.createObjectURL(blob);
+      const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
+      download.href = objectUrl;
+      download.download = '密码象-' + (task.id || task.number) + '-' + (index + 1) + '.' + extension;
+      document.body.append(download);
+      download.click();
+      download.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+    } catch {
+      save.textContent = '请打开原图长按保存';
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return { thumbnail, original, save };
+}
+
 function showImages(task, urls) {
   setStatus(task, '已生成');
-  task.images.hidden = false;
-  task.images.replaceChildren(...urls.map((url, index) => {
-    const item = document.createElement('div');
-    const image = new Image();
-    image.alt = '生成结果 ' + (index + 1);
-    image.loading = 'lazy';
-    image.referrerPolicy = 'no-referrer';
-    image.src = url;
+  task.completed = true;
+  let previous = task.node;
+  urls.forEach((url, index) => {
+    const { thumbnail, original, save } = imageCardParts(task, url, index);
+    if (index === 0) {
+      task.placeholder.replaceWith(thumbnail);
+      task.actions.append(original, save);
+      task.actions.hidden = false;
+      return;
+    }
+    const card = document.createElement('article');
+    card.className = 'task';
+    const content = document.createElement('div');
+    content.className = 'task-content';
+    const heading = document.createElement('h3');
+    heading.textContent = task.node.querySelector('h3').textContent;
+    heading.title = heading.textContent;
     const actions = document.createElement('div');
     actions.className = 'image-actions';
-    const original = document.createElement('a');
-    original.textContent = '打开原图 ↗';
-    original.href = url;
-    original.target = '_blank';
-    original.rel = 'noopener noreferrer';
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.textContent = '下载';
-    save.addEventListener('click', async () => {
-      save.disabled = true;
-      try {
-        const response = await fetch(url, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error('下载失败');
-        const blob = await response.blob();
-        const download = document.createElement('a');
-        const objectUrl = URL.createObjectURL(blob);
-        const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
-        download.href = objectUrl;
-        download.download = '密码象-' + (task.id || task.number) + '-' + (index + 1) + '.' + extension;
-        document.body.append(download);
-        download.click();
-        download.remove();
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
-      } catch {
-        save.textContent = '请打开原图长按保存';
-      } finally {
-        save.disabled = false;
-      }
-    });
     actions.append(original, save);
-    item.append(image, actions);
-    return item;
-  }));
+    content.append(heading, actions);
+    card.append(thumbnail, content);
+    previous.after(card);
+    previous = card;
+  });
+  syncGallery();
 }
 
 async function poll(task, currentKey) {
@@ -221,6 +288,18 @@ async function submit(input, currentKey) {
 options($('model'), models.map((model) => [model.id, model.name + ' · ' + creditLabel(model)]), 'gemini-nano-banana-2.1');
 options($('ratio'), ratios, '1:1');
 syncModel();
+syncGallery();
+gallery.addEventListener('scroll', syncGallery, { passive: true });
+new ResizeObserver(syncGallery).observe(gallery);
+slider.addEventListener('input', () => moveGallery(Number(slider.value)));
+$('gallery-prev').addEventListener('click', () => moveGallery(Number(slider.value) - 2));
+$('gallery-next').addEventListener('click', () => moveGallery(Number(slider.value) + 2));
+$('sample-preview').addEventListener('click', () => {
+  const image = $('sample-preview').querySelector('img');
+  showPreview(image.currentSrc, image.alt);
+});
+$('close-preview').addEventListener('click', () => $('image-dialog').close());
+$('image-dialog').addEventListener('close', () => $('preview-image').removeAttribute('src'));
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);
@@ -286,6 +365,6 @@ $('resume').addEventListener('submit', (event) => {
       task.id = id;
     }
     task.node.scrollIntoView({ block: 'nearest' });
-    if (task.images.hidden) runPoll(task, key);
+    if (!task.completed) runPoll(task, key);
   });
 });
