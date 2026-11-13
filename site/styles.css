@@ -96,4 +96,5 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
   .workspace { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .panel { padding: 16px; }
   .settings { gap: 6px; }
+  #model { letter-spacing: -.025em; padding-inline: 8px 4px; }
 }

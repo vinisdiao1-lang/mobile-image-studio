@@ -1,4 +1,4 @@
-import { creditLabel, generationRequest, isTaskId, models, ratios } from './models.js?v=2';
+import { creditLabel, generationRequest, isTaskId, models, ratios } from './models.js?v=3';
 
 const example = '电影感风光摄影。黄昏时，寂静的火山湖倒映着一线铜色霞光，深色山脊环绕湖面，远处薄雾中升起一轮小月亮。石墨蓝阴影，轻微胶片颗粒，横向构图。';
 const remoteApi = 'https://new.linlangai88.cn/mobile-image-api/';
@@ -22,9 +22,7 @@ function syncModel() {
   options($('size'), model.sizes, '2K');
   $('quality-row').hidden = !model.qualities;
   if (model.qualities) {
-    options($('quality'), model.qualities.map((value) => [
-      value, qualityLabels[value] + (model.premium ? ' · ' + creditLabel(model, value).split(' ')[0] : ''),
-    ]), 'high');
+    options($('quality'), model.qualities.map((value) => [value, qualityLabels[value]]), 'high');
   }
   syncCredits();
 }
