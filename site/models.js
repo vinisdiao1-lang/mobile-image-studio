@@ -33,6 +33,8 @@ const legacyModels = [
 ];
 
 export const ratios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
+export const maxReferences = 6;
+export const maxReferenceBytes = 1024 * 1024;
 
 export function creditLabel(model, quality) {
   if (model.credits === undefined) return '积分待确认';
@@ -76,7 +78,7 @@ export function generationRequest(input) {
   const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
   if (!prompt || prompt.length > 8000) throw new Error('请输入 1 至 8000 字的提示词。');
   if (!model || !model.sizes.includes(size) || !ratios.includes(ratio)) throw new Error('请选择有效的模型、比例和分辨率。');
-  if (!Array.isArray(references) || references.length > 6 || references.some((url) => !imageUrl(url))) {
+  if (!Array.isArray(references) || references.length > maxReferences || references.some((url) => !imageUrl(url))) {
     throw new Error('最多填写 6 个有效的公网 HTTP(S) 参考图链接。');
   }
 

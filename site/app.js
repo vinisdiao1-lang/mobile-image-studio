@@ -1,6 +1,5 @@
-import { creditLabel, generationRequest, isTaskId, models, ratios } from './models.js?v=3';
+import { creditLabel, generationRequest, isTaskId, maxReferenceBytes, maxReferences, models, ratios } from './models.js?v=5';
 
-const example = '电影感风光摄影。黄昏时，寂静的火山湖倒映着一线铜色霞光，深色山脊环绕湖面，远处薄雾中升起一轮小月亮。石墨蓝阴影，轻微胶片颗粒，横向构图。';
 const remoteApi = 'https://new.linlangai88.cn/mobile-image-api/';
 const apiBase = location.hostname === '127.0.0.1' ? '/mobile-image-api/' : remoteApi;
 const $ = (id) => document.getElementById(id);
@@ -12,6 +11,10 @@ const successStatuses = ['succeeded', 'completed', 'success'];
 const failureStatuses = ['failed', 'not_found', 'uncertain', 'canceled', 'cancelled'];
 const gallery = $('gallery');
 const slider = $('gallery-slider');
+const composer = $('create');
+const fileInput = $('reference-files');
+const referenceFiles = [];
+let preparingReferences = false;
 
 function options(select, items, preferred) {
   const previous = select.value;
@@ -72,6 +75,7 @@ function syncGallery() {
   slider.max = String(max || 1);
   slider.value = String(index);
   slider.disabled = max === 0;
+  $('gallery-controls').hidden = max === 0;
   $('gallery-prev').disabled = index === 0;
   $('gallery-next').disabled = index === max;
   const position = (index + 1) + '–' + Math.min(count, index + 2) + ' / ' + count;
@@ -91,6 +95,96 @@ function showPreview(url, alt) {
   image.alt = alt;
   image.src = url;
   $('image-dialog').showModal();
+}
+
+function referenceLinks() {
+  return $('references').value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function updateReferences() {
+  const count = referenceFiles.length + referenceLinks().length;
+  $('reference-count').textContent = count + ' / ' + maxReferences;
+  $('reference-thumbnails').hidden = referenceFiles.length === 0;
+  $('add-reference').disabled = preparingReferences || count >= maxReferences;
+  $('generate').disabled = preparingReferences;
+}
+
+async function prepareImage(file) {
+  if (file.size > 30 * 1024 * 1024) throw new Error('单张原图不能超过 30 MB。');
+  const source = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    if (file.type === 'image/png') {
+      const png = canvas.toDataURL('image/png');
+      if (png.length <= maxReferenceBytes * 4 / 3) return png;
+    }
+    context.globalCompositeOperation = 'destination-over';
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    const jpeg = canvas.toDataURL('image/jpeg', 0.82);
+    if (jpeg.length > maxReferenceBytes * 4 / 3) throw new Error('图片太大，请缩小后重新添加。');
+    return jpeg;
+  } finally {
+    URL.revokeObjectURL(source);
+  }
+}
+
+function addReferenceThumbnail(file, data) {
+  const item = document.createElement('li');
+  item.className = 'reference-item';
+  const image = new Image();
+  image.src = data;
+  image.alt = file.name;
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'remove-reference';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', '移除参考图 ' + file.name);
+  const reference = { data };
+  remove.addEventListener('click', () => {
+    referenceFiles.splice(referenceFiles.indexOf(reference), 1);
+    item.remove();
+    $('reference-note').textContent = '';
+    updateReferences();
+  });
+  referenceFiles.push(reference);
+  item.append(image, remove);
+  $('reference-thumbnails').append(item);
+}
+
+async function addReferenceFiles(files) {
+  if (!files.length || preparingReferences) return;
+  preparingReferences = true;
+  $('reference-note').textContent = '正在读取参考图…';
+  updateReferences();
+  const errors = new Set();
+  for (const file of files) {
+    if (referenceFiles.length + referenceLinks().length >= maxReferences) {
+      errors.add('参考图最多 6 张，含图片链接。');
+      break;
+    }
+    try {
+      const data = await prepareImage(file);
+      if (referenceFiles.length + referenceLinks().length >= maxReferences) {
+        errors.add('参考图最多 6 张，含图片链接。');
+        break;
+      }
+      addReferenceThumbnail(file, data);
+    } catch {
+      errors.add(file.name + ' 无法添加，请使用浏览器可打开的图片（如 JPG 或 PNG，原图不超过 30 MB）。');
+    }
+  }
+  preparingReferences = false;
+  $('reference-note').textContent = [...errors].join(' ');
+  updateReferences();
 }
 
 function addTask(title, settings) {
@@ -294,19 +388,33 @@ new ResizeObserver(syncGallery).observe(gallery);
 slider.addEventListener('input', () => moveGallery(Number(slider.value)));
 $('gallery-prev').addEventListener('click', () => moveGallery(Number(slider.value) - 2));
 $('gallery-next').addEventListener('click', () => moveGallery(Number(slider.value) + 2));
-$('sample-preview').addEventListener('click', () => {
-  const image = $('sample-preview').querySelector('img');
-  showPreview(image.currentSrc, image.alt);
-});
 $('close-preview').addEventListener('click', () => $('image-dialog').close());
 $('image-dialog').addEventListener('close', () => $('preview-image').removeAttribute('src'));
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);
-$('example-button').addEventListener('click', () => {
-  $('prompt').value = example;
-  $('ratio').value = '3:2';
-  syncPrompt();
+$('add-reference').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+  const files = [...fileInput.files];
+  fileInput.value = '';
+  addReferenceFiles(files);
+});
+$('references').addEventListener('input', updateReferences);
+document.addEventListener('dragover', (event) => {
+  if (!event.dataTransfer.types.includes('Files')) return;
+  event.preventDefault();
+  const inside = composer.contains(event.target);
+  composer.toggleAttribute('data-dragging', inside);
+  event.dataTransfer.dropEffect = inside ? 'copy' : 'none';
+});
+document.addEventListener('dragleave', (event) => {
+  if (!event.relatedTarget || !composer.contains(event.relatedTarget)) composer.removeAttribute('data-dragging');
+});
+document.addEventListener('drop', (event) => {
+  if (!event.dataTransfer.files.length) return;
+  event.preventDefault();
+  composer.removeAttribute('data-dragging');
+  if (composer.contains(event.target)) addReferenceFiles([...event.dataTransfer.files]);
 });
 $('open-key').addEventListener('click', () => openKey());
 $('close-key').addEventListener('click', () => $('key-dialog').close());
@@ -332,8 +440,9 @@ $('key-form').addEventListener('submit', (event) => {
   callback?.();
 });
 $('api-key').addEventListener('input', () => $('api-key').setCustomValidity(''));
-$('create').addEventListener('submit', (event) => {
+composer.addEventListener('submit', (event) => {
   event.preventDefault();
+  if (preparingReferences) return;
   $('form-note').textContent = '';
   const input = {
     model: $('model').value,
@@ -341,9 +450,11 @@ $('create').addEventListener('submit', (event) => {
     ratio: $('ratio').value,
     size: $('size').value,
     quality: $('quality').value,
-    references: $('references').value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+    references: referenceLinks(),
+    referenceFiles: referenceFiles.map((reference) => reference.data),
   };
   try {
+    if (input.references.length + input.referenceFiles.length > maxReferences) throw new Error('参考图最多 6 张，含图片链接。');
     generationRequest(input);
     withKey(() => submit(input, key));
   } catch (error) {

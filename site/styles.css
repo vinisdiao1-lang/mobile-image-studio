@@ -55,10 +55,8 @@ button:disabled { cursor: default; opacity: .46; }
 .thumbnail:focus-visible { outline-offset: -3px; }
 .thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .zoom { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; min-width: 30px; height: 30px; border-radius: 8px; background: #f8fbfff2; color: var(--accent-dark); font-size: 16px; }
-figcaption { display: flex; justify-content: space-between; gap: 5px; align-items: baseline; padding: 9px 11px; font-size: 13px; }
-figcaption span { flex: none; color: var(--muted); font-size: 11px; }
 .gallery .empty-card, .task-placeholder { display: grid; place-content: center; justify-items: center; gap: 8px; min-height: var(--media-height); text-align: center; color: var(--muted); background: #e6eef9; padding: 10px; font-size: 12px; }
-.gallery .empty-card { border-style: dashed; }
+.gallery .empty-card { grid-column: span 2; min-height: clamp(85px, 24vw, 135px); border-style: dashed; }
 .empty-icon, .task-placeholder > :first-child { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: #f6faff; color: var(--accent); font-size: 17px; }
 .task-content { padding: 8px 10px; overflow-wrap: anywhere; }
 .task h3 { margin: 0; font-size: 13px; font-weight: 720; line-height: 1.45; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -92,9 +90,18 @@ textarea { resize: vertical; line-height: 1.55; }
 textarea::placeholder, input::placeholder { color: #657b94; }
 .prompt-box { padding: 12px 15px 2px; background: var(--inset); border-block: 1px solid var(--line); }
 #prompt { border: 0; border-radius: 0; padding: 2px 0; min-height: 94px; }
-.prompt-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
-.link { min-height: 40px; color: var(--accent-dark); background: transparent; border: 0; padding: 0; font-weight: 650; }
+.prompt-actions { display: flex; justify-content: flex-end; padding: 4px 0 7px; color: var(--muted); font-size: 12px; }
 .composer-footer { padding: 12px 15px 8px; }
+.reference-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+#add-reference { display: inline-flex; align-items: center; gap: 4px; border-style: dashed; min-height: 44px; color: var(--accent-dark); font-size: 13px; font-weight: 700; }
+#add-reference span { font-size: 19px; line-height: 1; }
+.reference-hints { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+#reference-thumbnails { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; list-style: none; margin: 0; padding: 2px 0; }
+.reference-item { position: relative; width: 65px; height: 65px; }
+.reference-item img { display: block; width: 100%; height: 100%; object-fit: cover; border: 1px solid var(--line); border-radius: 9px; }
+.remove-reference { position: absolute; right: 0; top: 0; min-height: 27px; min-width: 27px; padding: 0; color: var(--accent-dark); background: #f8fbfff2; }
+.composer[data-dragging] { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.composer[data-dragging] .reference-picker { background: var(--inset); }
 .toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
 .toolbar > div { min-width: 90px; }
 .toolbar .model-field { flex: 1 1 290px; min-width: 0; }
@@ -130,4 +137,7 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
   #generate { width: 100%; }
   .composer-heading, .composer-footer { padding-inline: 11px; }
   .prompt-box { padding-inline: 11px; }
+}
+@media (pointer: coarse) {
+  .drop-hint { display: none; }
 }

@@ -1,11 +1,27 @@
 import { createServer } from 'node:http';
+import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { generationRequest, imageUrl, isTaskId } from './site/models.js';
+import { generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences } from './site/models.js';
 
 const port = Number(process.env.PORT || 4317);
 const pagesOrigin = process.env.PAGES_ORIGIN || 'https://vinisdiao1-lang.github.io';
 const upstream = 'https://async.xinbao-ai.com';
 const prefix = '/mobile-image-api/';
+const publicApi = 'https://new.linlangai88.cn' + prefix;
+const referenceLifetime = 60 * 60 * 1000;
+const referenceStorageLimit = 96 * 1024 * 1024;
+const temporaryReferences = new Map();
+let referenceBytes = 0;
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, image] of temporaryReferences) {
+    if (image.expires <= now) {
+      temporaryReferences.delete(token);
+      referenceBytes -= image.bytes.length;
+    }
+  }
+}, 60_000).unref();
+
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
@@ -13,7 +29,6 @@ const assets = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/models.js', ['models.js', 'text/javascript; charset=utf-8']],
   ['/icon.svg', ['icon.svg', 'image/svg+xml']],
-  ['/example.jpg', ['example.jpg', 'image/jpeg']],
 ]);
 
 function send(response, status, payload) {
@@ -21,15 +36,65 @@ function send(response, status, payload) {
   response.end(JSON.stringify(payload));
 }
 
-async function readJson(request) {
+async function readJson(request, limit) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     size += chunk.length;
-    if (size > 64 * 1024) throw new Error('请求内容过长。');
+    if (size > limit) throw new Error('请求内容过长。');
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function decodeReference(value) {
+  if (typeof value !== 'string' || value.length > Math.ceil(maxReferenceBytes / 3) * 4 + 32) {
+    throw new Error('参考图文件无效或过大。');
+  }
+  const match = value.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match || match[2].length % 4 !== 0) throw new Error('参考图文件格式无效。');
+  const format = match[1];
+  const bytes = Buffer.from(match[2], 'base64');
+  const signature = bytes.subarray(0, format === 'png' ? 8 : 3).toString('hex');
+  if (bytes.length > maxReferenceBytes || signature !== (format === 'png' ? '89504e470d0a1a0a' : 'ffd8ff')) {
+    throw new Error('参考图文件无效或过大。');
+  }
+  return { format, bytes };
+}
+
+function generationWithReferences(input) {
+  const request = generationRequest(input);
+  const files = input.referenceFiles ?? [];
+  if (!Array.isArray(files) || files.length + (input.references?.length ?? 0) > maxReferences) {
+    throw new Error('参考图最多 6 张，含图片链接。');
+  }
+  if (!files.length) return request;
+  const images = files.map(decodeReference);
+  const size = images.reduce((sum, image) => sum + image.bytes.length, 0);
+  if (referenceBytes + size > referenceStorageLimit) throw new Error('参考图服务暂时繁忙，请稍后再试。');
+
+  const expires = Date.now() + referenceLifetime;
+  const entries = images.map((image) => [randomBytes(24).toString('hex') + '.' + image.format, { ...image, expires }]);
+  const urls = entries.map(([token]) => publicApi + 'reference/' + token);
+  const outbound = generationRequest({ ...input, references: [...(input.references ?? []), ...urls] });
+  for (const [token, image] of entries) temporaryReferences.set(token, image);
+  referenceBytes += size;
+  return outbound;
+}
+
+function serveReference(request, response, token) {
+  const image = temporaryReferences.get(token);
+  if (!['GET', 'HEAD'].includes(request.method) || !image || image.expires <= Date.now()) {
+    return send(response, 404, { error: '参考图不存在或已过期。' });
+  }
+  response.writeHead(200, {
+    'Content-Type': 'image/' + image.format,
+    'Content-Length': image.bytes.length,
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Robots-Tag': 'noindex',
+  });
+  response.end(request.method === 'HEAD' ? undefined : image.bytes);
 }
 
 function resultImages(data) {
@@ -65,6 +130,7 @@ function providerMessage(data, fallback, key) {
 }
 
 async function api(request, response, path) {
+  if (path.startsWith('reference/')) return serveReference(request, response, path.slice('reference/'.length));
   const origin = request.headers.origin;
   const selfOrigin = 'http://127.0.0.1:' + port;
   const productionOrigin = 'https://new.linlangai88.cn';
@@ -90,9 +156,9 @@ async function api(request, response, path) {
   const key = match[1];
   let outbound;
   try {
-    const input = await readJson(request);
+    const input = await readJson(request, path === 'generate' ? 9 * 1024 * 1024 : 64 * 1024);
     if (path === 'generate') {
-      outbound = generationRequest(input);
+      outbound = generationWithReferences(input);
     } else {
       if (!isTaskId(input?.id)) throw new Error('请检查任务 ID。');
       outbound = { path: '/v1/tasks/batch-get', body: { ids: [input.id] } };
