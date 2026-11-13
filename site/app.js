@@ -1,7 +1,8 @@
 import { creditLabel, generationRequest, isTaskId, maxReferenceBytes, maxReferences, models, ratios } from './models.js?v=5';
 
-const remoteApi = 'https://new.linlangai88.cn/mobile-image-api/';
-const apiBase = location.hostname === '127.0.0.1' ? '/mobile-image-api/' : remoteApi;
+const cloudOrigin = 'https://new.linlangai88.cn';
+const apiPath = '/mobile-image-api/';
+const apiBase = location.hostname === '127.0.0.1' || location.origin === cloudOrigin ? apiPath : cloudOrigin + apiPath;
 const keyStorage = 'mobile-image-studio.api-key';
 const $ = (id) => document.getElementById(id);
 let key = '';

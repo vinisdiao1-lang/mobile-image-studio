@@ -1,6 +1,6 @@
 # 密码象 · AI 生图
 
-在手机或桌面浏览器打开 [密码象](https://vinisdiao1-lang.github.io/mobile-image-studio/)，填入 API Key，选择模型后提交提示词。模型旁显示每张图的参考积分。
+在手机或桌面浏览器打开 [密码象（腾讯云）](https://new.linlangai88.cn/mobile-image-studio/)，填入 API Key，选择模型后提交提示词。模型旁显示每张图的参考积分。[GitHub Pages 版](https://vinisdiao1-lang.github.io/mobile-image-studio/) 也可访问。
 
 每次提交会新增一个任务。上一张图生成时，可以修改提示词或参数并继续提交。各任务独立显示状态、结果和下载按钮，也可用任务 ID 继续查询。
 
@@ -23,4 +23,8 @@ npm start
 
 ## 发布
 
-推送 `main` 后，GitHub Actions 将 `site/` 发布到 GitHub Pages。修改 API 时，在腾讯云同步 `server.mjs`、`package.json` 和 `site/models.js` 到 `/home/ubuntu/mobile-image-studio/`，然后重启 `mobile-image-studio.service`。系统服务和 Nginx 路由配置见 `deploy/`。代理监听本地 4317 端口，由 `new.linlangai88.cn` 的 `/mobile-image-api/` 路由提供 HTTPS。
+腾讯云发布时，将 `site/` 发布为 `/var/www/mobile-image-studio/` 下的新版本目录，并将 `current` 链接切到该版本。Nginx 通过 `deploy/mobile-image-api.conf` 里的路径提供页面和同域 API。仅修改前端时，无需重启 API 服务。
+
+修改 API 时，在腾讯云同步 `server.mjs`、`package.json` 和 `site/models.js` 到 `/home/ubuntu/mobile-image-studio/`，然后重启 `mobile-image-studio.service`。代理监听本地 4317 端口，由 `new.linlangai88.cn` 的 `/mobile-image-api/` 路由提供 HTTPS。
+
+推送 `main` 后，GitHub Actions 将 `site/` 发布到 GitHub Pages。浏览器按域名保存 Key，切换域名时需重新设置一次。
