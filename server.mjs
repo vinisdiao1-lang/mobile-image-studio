@@ -57,7 +57,11 @@ function resultImages(data) {
 
 function providerMessage(data, fallback, key) {
   const message = data?.error?.message ?? data?.error?.detail ?? data?.message ?? data?.error;
-  return typeof message === 'string' && message ? message.replaceAll(key, '••••').slice(0, 350) : fallback;
+  if (typeof message !== 'string' || !message) return fallback;
+  return message.replaceAll(key, '••••')
+    .replace(/(?:https?:\/\/)?(?:[\w-]+\.)*xinbao-ai\.com\b[^\s"'<>]*/gi, '生图服务')
+    .replace(/新宝(?:\s*AI)?|xinbao(?:[\s-]*ai)?/gi, '生图服务')
+    .slice(0, 350);
 }
 
 async function api(request, response, path) {
@@ -82,7 +86,7 @@ async function api(request, response, path) {
   if (request.method !== 'POST') return send(response, 405, { error: '此接口只接受 POST 请求。' });
 
   const match = request.headers.authorization?.match(/^Bearer ([!-~]{1,512})$/);
-  if (!match) return send(response, 401, { error: '请先设置有效的新宝 API Key。' });
+  if (!match) return send(response, 401, { error: '请先设置有效的 API Key。' });
   const key = match[1];
   let outbound;
   try {
@@ -108,9 +112,9 @@ async function api(request, response, path) {
     const data = await upstreamResponse.json().catch(() => null);
     if (!upstreamResponse.ok) {
       const status = upstreamResponse.status;
-      return send(response, status, { error: providerMessage(data, '新宝接口返回 HTTP ' + status + '。', key) });
+      return send(response, status, { error: providerMessage(data, '生图服务返回 HTTP ' + status + '。', key) });
     }
-    if (data?.error) return send(response, 502, { error: providerMessage(data, '新宝返回了接口错误。', key) });
+    if (data?.error) return send(response, 502, { error: providerMessage(data, '生图服务返回了接口错误。', key) });
 
     if (path === 'generate') {
       const id = data?.id ?? data?.task_id ?? data?.data?.id ?? data?.data?.task_id;
@@ -120,24 +124,24 @@ async function api(request, response, path) {
       }
       const images = resultImages(data);
       if (images.length) return send(response, 200, { status: 'succeeded', images });
-      if (!isTaskId(id)) return send(response, 502, { error: '新宝未返回可识别的任务 ID。请先检查新宝的任务记录。' });
+      if (!isTaskId(id)) return send(response, 502, { error: '未收到可识别的任务 ID。请先核对任务记录，避免重复生成。' });
       return send(response, 200, { id, status: 'pending' });
     }
 
     const id = outbound.body.ids[0];
     const task = data?.items?.find((item) => item.id === id);
-    if (!task) return send(response, 502, { error: '新宝未返回这条任务的状态。' });
+    if (!task) return send(response, 502, { error: '暂时无法读取这条任务的状态。' });
     return send(response, 200, {
       id,
       status: task.status,
       images: resultImages(task),
       nextPoll: data.next_poll_after_ms,
-      error: task.error ? providerMessage(task, '新宝未提供任务失败原因。', key) : undefined,
+      error: task.error ? providerMessage(task, '服务未返回任务失败原因。', key) : undefined,
     });
   } catch {
     return send(response, 502, { error: path === 'generate'
-      ? '提交结果暂时无法确认。请先检查新宝的任务记录，避免重复生成。'
-      : '暂时无法连接新宝。可以继续查询这条任务。' });
+      ? '提交结果暂时无法确认。请先核对任务记录，避免重复生成。'
+      : '暂时无法连接生图服务。可以继续查询这条任务。' });
   }
 }
 

@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#121318">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
-  <title>微光 · AI 生图</title>
+  <link rel="stylesheet" href="./styles.css?v=2">
+  <title>密码象 · AI 生图</title>
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"> 微光</a>
+    <a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"> 密码象</a>
     <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
   </header>
   <main>
@@ -27,7 +27,7 @@
           <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
           <div class="prompt-actions"><button id="example-button" type="button" class="link">试用示例提示词</button><output id="count" for="prompt">0 / 8000</output></div>
         </div>
-        <label for="model">模型</label>
+        <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
         <select id="model"></select>
         <div class="settings">
           <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
@@ -41,36 +41,41 @@
         </details>
         <button class="primary" id="generate" type="submit"><span aria-hidden="true">✦</span> 生成图片</button>
         <p class="notice" id="form-note" role="status"></p>
+        <a class="task-shortcut" id="task-shortcut" href="#result-title" hidden></a>
       </form>
       <section class="panel result" aria-labelledby="result-title">
-        <div class="panel-heading"><h2 id="result-title">画布</h2><span id="result-badge">示例图</span></div>
+        <div class="panel-heading"><h2 id="result-title">生图任务</h2><span id="result-badge">示例图</span></div>
         <figure id="sample">
           <img src="./example.jpg" width="1200" height="800" alt="暮色中的火山湖倒映铜色霞光，远处山间有薄雾和一轮月亮">
           <figcaption>山湖暮光</figcaption>
         </figure>
-        <div id="pending" class="pending" hidden>
-          <div class="pending-mark" aria-hidden="true">✦</div>
-          <p id="task-status" role="status" aria-live="polite"></p>
-          <p id="task-id" class="task-id"></p>
-          <button id="poll-again" type="button" hidden>继续查询</button>
-        </div>
-        <div id="images" class="images" hidden></div>
+        <ol id="tasks" class="tasks" hidden></ol>
         <details class="resume">
           <summary>查询已有任务</summary>
-          <form id="resume"><label for="resume-id">任务 ID</label><div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div></form>
+          <form id="resume"><label for="resume-id">任务 ID</label><div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div><p class="notice" id="resume-note" role="status"></p></form>
         </details>
       </section>
     </div>
   </main>
+  <template id="task-template">
+    <li class="task">
+      <div class="task-heading"><h3></h3><span class="task-state"></span></div>
+      <p class="task-settings" hidden></p>
+      <p class="task-status" role="status"></p>
+      <p class="task-id" hidden></p>
+      <button class="poll-again" type="button" hidden>继续查询</button>
+      <div class="images" hidden></div>
+    </li>
+  </template>
   <dialog id="key-dialog">
     <form id="key-form">
-      <div class="panel-heading"><h2>新宝 API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
-      <p>Key 仅在本次页面打开期间有效。提交和查询时会通过 HTTPS 转发给新宝。</p>
+      <div class="panel-heading"><h2>API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
+      <p>Key 仅保存在当前页面，用于通过 HTTPS 提交和查询任务。</p>
       <label for="api-key">API Key</label>
-      <input id="api-key" type="password" maxlength="512" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入你的新宝 API Key">
+      <input id="api-key" type="password" maxlength="512" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入你的 API Key">
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js?v=2"></script>
 </body>
 </html>

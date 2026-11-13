@@ -36,6 +36,8 @@ h1 span { color: var(--accent); margin-inline-start: .09em; }
 .panel h2, dialog h2 { font-size: 18px; font-weight: 730; }
 .composer h2 { margin-bottom: 18px; }
 label { display: block; font-size: 13px; font-weight: 650; margin-bottom: 7px; }
+.model-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.model-heading output { color: var(--accent); font-size: 13px; font-variant-numeric: tabular-nums; }
 textarea, select, input { display: block; width: 100%; min-width: 0; padding: 11px 12px; font-size: 16px; }
 textarea { resize: vertical; line-height: 1.55; }
 textarea::placeholder, input::placeholder { color: #918d98; }
@@ -57,14 +59,22 @@ summary span { margin-left: 5px; font-weight: 450; }
 #generate { width: 100%; }
 .notice { color: #ffc1b0; margin-top: 9px; font-size: 13px; line-height: 1.5; }
 .notice:empty { display: none; }
+.task-shortcut { display: inline-flex; align-items: center; min-height: 42px; margin-top: 5px; color: var(--accent); font-size: 13px; text-decoration: none; }
+.task-shortcut:hover { text-decoration: underline; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 #result-badge { color: var(--muted); font-size: 12px; }
+#result-title { scroll-margin-top: 18px; }
 figure { position: relative; overflow: hidden; border-radius: 12px; background: var(--inset); }
 figure img { display: block; width: 100%; height: auto; }
 figcaption { position: absolute; bottom: 0; width: 100%; padding: 32px 16px 13px; background: linear-gradient(transparent, #0d1015c9); color: #f9eee8; font-size: 13px; }
-.pending { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; min-height: 235px; padding: 22px; border-radius: 12px; background: var(--inset); overflow-wrap: anywhere; }
-.pending-mark { font-size: 28px; color: var(--accent); }
-.task-id { color: var(--muted); font-size: 12px; }
+.tasks { display: grid; gap: 12px; list-style: none; padding: 0; margin: 0; }
+.task { min-width: 0; padding: 13px; border-radius: 12px; background: var(--inset); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.task-heading { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.task h3 { margin: 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; }
+.task-state { color: var(--accent); font-size: 12px; flex: none; padding-top: 2px; }
+.task-settings, .task-status, .task-id { margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.task-status { font-size: 13px; }
+.poll-again, .task .images { margin-top: 10px; }
 .images { display: grid; gap: 15px; }
 .images img { display: block; width: 100%; max-height: 66vh; object-fit: contain; border-radius: 12px; background: var(--inset); }
 .image-actions { display: flex; gap: 14px; margin: 8px 0; color: var(--accent); font-size: 13px; }

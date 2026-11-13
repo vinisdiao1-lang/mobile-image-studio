@@ -1,4 +1,4 @@
-import { generationRequest, isTaskId, models, ratios } from './models.js';
+import { creditLabel, generationRequest, isTaskId, models, ratios } from './models.js?v=2';
 
 const example = '电影感风光摄影。黄昏时，寂静的火山湖倒映着一线铜色霞光，深色山脊环绕湖面，远处薄雾中升起一轮小月亮。石墨蓝阴影，轻微胶片颗粒，横向构图。';
 const remoteApi = 'https://new.linlangai88.cn/mobile-image-api/';
@@ -6,8 +6,10 @@ const apiBase = location.hostname === '127.0.0.1' ? '/mobile-image-api/' : remot
 const $ = (id) => document.getElementById(id);
 let key = '';
 let afterKey;
-let activeId;
-let busy = false;
+const tasks = [];
+const qualityLabels = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
+const successStatuses = ['succeeded', 'completed', 'success'];
+const failureStatuses = ['failed', 'not_found', 'uncertain', 'canceled', 'cancelled'];
 
 function options(select, items, preferred) {
   const previous = select.value;
@@ -20,9 +22,16 @@ function syncModel() {
   options($('size'), model.sizes, '2K');
   $('quality-row').hidden = !model.qualities;
   if (model.qualities) {
-    const labels = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
-    options($('quality'), model.qualities.map((value) => [value, labels[value]]), 'high');
+    options($('quality'), model.qualities.map((value) => [
+      value, qualityLabels[value] + (model.premium ? ' · ' + creditLabel(model, value).split(' ')[0] : ''),
+    ]), 'high');
   }
+  syncCredits();
+}
+
+function syncCredits() {
+  const model = models.find((item) => item.id === $('model').value);
+  $('model-credits').textContent = creditLabel(model, $('quality').value);
 }
 
 function setKey(value) {
@@ -46,21 +55,48 @@ function syncPrompt() {
   $('count').textContent = $('prompt').value.length + ' / 8000';
 }
 
-function setBusy(value) {
-  busy = value;
-  $('generate').disabled = value;
-  $('resume').querySelector('button').disabled = value;
-  $('poll-again').disabled = value;
+function updateTaskCount() {
+  const active = tasks.filter((task) => task.running).length;
+  $('result-badge').textContent = active ? active + ' 个进行中 / ' + tasks.length + ' 个任务' : tasks.length + ' 个任务';
+  $('task-shortcut').textContent = '查看生图任务（' + (active ? active + ' 个进行中' : tasks.length + ' 个') + '）↓';
 }
 
-function setStatus(badge, message, id, retry = false) {
+function addTask(title, settings) {
+  const node = $('task-template').content.firstElementChild.cloneNode(true);
+  const task = {
+    node,
+    status: node.querySelector('.task-status'),
+    state: node.querySelector('.task-state'),
+    taskId: node.querySelector('.task-id'),
+    retry: node.querySelector('.poll-again'),
+    images: node.querySelector('.images'),
+    running: false,
+  };
+  node.querySelector('h3').textContent = title;
+  const meta = node.querySelector('.task-settings');
+  meta.textContent = settings || '';
+  meta.hidden = !settings;
+  task.retry.addEventListener('click', () => withKey(() => runPoll(task, key)));
+  tasks.push(task);
+  $('tasks').prepend(node);
   $('sample').hidden = true;
-  $('images').hidden = true;
-  $('pending').hidden = false;
-  $('result-badge').textContent = badge;
-  $('task-status').textContent = message;
-  $('task-id').textContent = id ? '任务 ID  ' + id : '';
-  $('poll-again').hidden = !retry;
+  $('tasks').hidden = false;
+  $('task-shortcut').hidden = false;
+  return task;
+}
+
+function setStatus(task, badge, message = '', retry = false) {
+  task.state.textContent = badge;
+  task.status.textContent = message;
+  task.status.hidden = !message;
+  task.taskId.textContent = task.id ? '任务 ID  ' + task.id : '';
+  task.taskId.hidden = !task.id;
+  task.retry.hidden = !retry;
+}
+
+function setRunning(task, running) {
+  task.running = running;
+  updateTaskCount();
 }
 
 async function callApi(path, payload, currentKey) {
@@ -74,7 +110,7 @@ async function callApi(path, payload, currentKey) {
     });
   } catch {
     throw new Error(path === 'generate'
-      ? '提交结果暂时无法确认。请先检查新宝的任务记录，避免重复生成。'
+      ? '提交结果暂时无法确认。请先核对任务记录，避免重复生成。'
       : '网络暂时不可用。可以继续查询这条任务。');
   }
   const data = await response.json().catch(() => null);
@@ -82,14 +118,14 @@ async function callApi(path, payload, currentKey) {
   return data;
 }
 
-function showImages(urls) {
-  $('pending').hidden = true;
-  $('images').hidden = false;
-  $('result-badge').textContent = '已生成';
-  $('images').replaceChildren(...urls.map((url, index) => {
+function showImages(task, urls) {
+  setStatus(task, '已生成');
+  task.images.hidden = false;
+  task.images.replaceChildren(...urls.map((url, index) => {
     const item = document.createElement('div');
     const image = new Image();
     image.alt = '生成结果 ' + (index + 1);
+    image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
     image.src = url;
     const actions = document.createElement('div');
@@ -112,7 +148,7 @@ function showImages(urls) {
         const objectUrl = URL.createObjectURL(blob);
         const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
         download.href = objectUrl;
-        download.download = '微光-' + (index + 1) + '.' + extension;
+        download.download = '密码象-' + (task.id || task.number) + '-' + (index + 1) + '.' + extension;
         document.body.append(download);
         download.click();
         download.remove();
@@ -129,64 +165,66 @@ function showImages(urls) {
   }));
 }
 
-async function poll(id, currentKey) {
-  activeId = id;
-  $('resume-id').value = id;
+async function poll(task, currentKey) {
   const until = Date.now() + 15 * 60 * 1000;
-  setStatus('进行中', '等待新宝返回生成结果…', id);
+  setStatus(task, '进行中', '正在等待生成结果…');
   while (Date.now() < until) {
     let data;
     try {
-      data = await callApi('task', { id }, currentKey);
+      data = await callApi('task', { id: task.id }, currentKey);
     } catch (error) {
-      setStatus('查询暂停', error.message, id, true);
+      setStatus(task, '查询暂停', error.message, true);
       return;
     }
-    if (data.images?.length && ['succeeded', 'completed', 'success'].includes(data.status)) {
-      showImages(data.images);
+    if (data.images?.length && successStatuses.includes(data.status)) {
+      showImages(task, data.images);
       return;
     }
-    if (['failed', 'not_found', 'uncertain', 'canceled', 'cancelled', 'succeeded', 'completed', 'success'].includes(data.status)) {
-      setStatus('任务结束', data.error || '新宝没有返回可显示的图片。', id, data.status === 'uncertain');
+    if (failureStatuses.includes(data.status) || successStatuses.includes(data.status)) {
+      setStatus(task, '任务结束', data.error || '这条任务没有返回可显示的图片。', data.status === 'uncertain');
       return;
     }
     const delay = Math.max(3000, Math.min(60000, Number(data.nextPoll) || 10000));
     await new Promise((resolve) => setTimeout(resolve, delay));
   }
-  setStatus('查询暂停', '这条任务等待较久，可以继续查询。', id, true);
+  setStatus(task, '查询暂停', '这条任务等待较久，可以继续查询。', true);
 }
 
-async function runPoll(id) {
-  if (busy) return;
-  setBusy(true);
+async function runPoll(task, currentKey) {
+  if (task.running) return;
+  setRunning(task, true);
   try {
-    await poll(id, key);
+    await poll(task, currentKey);
   } finally {
-    setBusy(false);
+    setRunning(task, false);
   }
 }
 
-async function submit(input) {
-  if (busy) return;
-  setBusy(true);
-  const currentKey = key;
-  setStatus('正在提交', '正在提交生图任务…');
-  if (matchMedia('(max-width: 760px)').matches) $('result-title').scrollIntoView({ block: 'start' });
+async function submit(input, currentKey) {
+  const model = models.find((item) => item.id === input.model);
+  const settings = [model.name, input.ratio, input.size, creditLabel(model, input.quality)].join(' · ');
+  const task = addTask(input.prompt.trim(), settings);
+  task.number = tasks.length;
+  setRunning(task, true);
+  setStatus(task, '正在提交', '正在提交生图任务…');
   try {
     const data = await callApi('generate', input, currentKey);
-    if (data.images?.length) showImages(data.images);
-    else await poll(data.id, currentKey);
+    if (isTaskId(data.id)) task.id = data.id;
+    if (data.images?.length) showImages(task, data.images);
+    else if (task.id) await poll(task, currentKey);
+    else setStatus(task, '提交未确认', '未收到任务 ID。请先核对任务记录，避免重复生成。');
   } catch (error) {
-    setStatus('提交未完成', error.message);
+    setStatus(task, '提交未完成', error.message);
   } finally {
-    setBusy(false);
+    setRunning(task, false);
   }
 }
 
-options($('model'), models.map((item) => [item.id, item.name]), models[0].id);
+options($('model'), models.map((model) => [model.id, model.name + ' · ' + creditLabel(model)]), 'gemini-nano-banana-2.1');
 options($('ratio'), ratios, '1:1');
 syncModel();
 $('model').addEventListener('change', syncModel);
+$('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);
 $('example-button').addEventListener('click', () => {
   $('prompt').value = example;
@@ -230,15 +268,26 @@ $('create').addEventListener('submit', (event) => {
   };
   try {
     generationRequest(input);
-    withKey(() => submit(input));
+    withKey(() => submit(input, key));
   } catch (error) {
     $('form-note').textContent = error.message;
   }
 });
 $('resume').addEventListener('submit', (event) => {
   event.preventDefault();
+  $('resume-note').textContent = '';
   const id = $('resume-id').value.trim();
-  if (!isTaskId(id)) return setStatus('无法查询', '请检查任务 ID。');
-  withKey(() => runPoll(id));
+  if (!isTaskId(id)) {
+    $('resume-note').textContent = '请检查任务 ID。';
+    return;
+  }
+  withKey(() => {
+    let task = tasks.find((item) => item.id === id);
+    if (!task) {
+      task = addTask('查询已有任务');
+      task.id = id;
+    }
+    task.node.scrollIntoView({ block: 'nearest' });
+    if (task.images.hidden) runPoll(task, key);
+  });
 });
-$('poll-again').addEventListener('click', () => withKey(() => runPoll(activeId)));
