@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=7">
+  <link rel="stylesheet" href="./styles.css?v=9">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -33,6 +33,12 @@
           <button id="gallery-prev" type="button" aria-label="上一组图片" aria-controls="gallery" disabled>‹</button>
           <button id="gallery-next" type="button" aria-label="下一组图片" aria-controls="gallery" disabled>›</button>
         </div>
+      </div>
+      <div class="history-controls">
+        <button id="manage-tasks" type="button" hidden>管理任务</button>
+        <button id="delete-tasks" type="button" hidden disabled>删除所选</button>
+        <button id="more-tasks" type="button" hidden>加载更早记录</button>
+        <p id="history-note" class="notice" role="status"></p>
       </div>
       <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可左右滚动">
         <div class="empty-card" data-placeholder>
@@ -96,6 +102,7 @@
   </main>
   <template id="task-template">
     <article class="task">
+      <label class="task-select" hidden><input type="checkbox" aria-label="选择任务"></label>
       <div class="task-placeholder"><span aria-hidden="true">✦</span><span class="task-state"></span></div>
       <div class="task-content">
         <h3></h3>
@@ -107,6 +114,13 @@
       </div>
     </article>
   </template>
+  <dialog id="delete-dialog" aria-labelledby="delete-title">
+    <form method="dialog">
+      <div class="panel-heading"><h2 id="delete-title">删除创作记录</h2></div>
+      <p id="delete-description"></p>
+      <div class="dialog-actions"><button value="cancel">取消</button><button class="danger" value="delete">确认删除</button></div>
+    </form>
+  </dialog>
   <dialog id="image-dialog" aria-labelledby="preview-title">
     <div class="panel-heading"><h2 id="preview-title">图片预览</h2><button id="close-preview" type="button" aria-label="关闭预览">×</button></div>
     <img id="preview-image" alt="" referrerpolicy="no-referrer">
@@ -121,6 +135,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=8"></script>
+  <script type="module" src="./app.js?v=9"></script>
 </body>
 </html>

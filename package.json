@@ -5,6 +5,6 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check site/app.js && node --check site/models.js"
+    "check": "node --check server.mjs && node --check archive.mjs && node --check site/app.js && node --check site/models.js"
   }
 }

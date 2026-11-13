@@ -6,7 +6,7 @@
 
 在电脑上将图片拖入生成表单，或在手机上点「＋ 参考图」从相册选择。参考图文件和公网 HTTP(S) 链接合计最多 6 张。浏览器将图片长边缩至最多 1600 像素，提交时生成供生图服务读取的临时链接，1 小时后失效。
 
-Key 保存在当前浏览器，可在设置中更换或清除。任务列表保存在当前页面的内存中。API 转发服务通过 HTTPS 接收请求并调用生图和任务查询接口。
+Key 保存在当前浏览器，可在设置中更换或清除。创作记录和留存图片保存在腾讯云，使用同一 Key 可跨设备查看。点「管理任务」，勾选任务后可删除该站的创作记录和图片。旧任务可通过「查询已有任务」输入任务 ID 导入尚可读取的结果。
 
 顶部显示与任务看板使用同一账单接口的剩余积分。设置 Key、切换视图和返回页面时会查询，页面可见时每 20 秒更新，也可点余额手动刷新。点击「任务看板」在站内打开任务中心并沿用已保存的 Key。
 
@@ -25,6 +25,6 @@ npm start
 
 腾讯云发布时，将 `site/` 发布为 `/var/www/mobile-image-studio/` 下的新版本目录，并将 `current` 链接切到该版本。Nginx 通过 `deploy/mobile-image-api.conf` 里的路径提供页面和同域 API。仅修改前端时，无需重启 API 服务。
 
-修改 API 时，在腾讯云同步 `server.mjs`、`package.json` 和 `site/models.js` 到 `/home/ubuntu/mobile-image-studio/`，然后重启 `mobile-image-studio.service`。代理监听本地 4317 端口，由 `new.linlangai88.cn` 的 `/mobile-image-api/` 路由提供 HTTPS。
+修改 API 时，在腾讯云同步 `server.mjs`、`archive.mjs`、`package.json` 和 `site/models.js` 到 `/home/ubuntu/mobile-image-studio/`，然后重启 `mobile-image-studio.service`。历史记录数据库位于该目录下的 `.studio-data/`，发布时应保留。代理监听本地 4317 端口，由 `new.linlangai88.cn` 的 `/mobile-image-api/` 路由提供 HTTPS。
 
 推送 `main` 后，GitHub Actions 将 `site/` 发布到 GitHub Pages。浏览器按域名保存 Key，切换域名时需重新设置一次。

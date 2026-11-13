@@ -14,6 +14,18 @@ let balanceRequest;
 let lastBalance;
 const pointFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
 const tasks = [];
+let managingTasks = false;
+let nextHistory;
+let historyLoading = false;
+const emptyGallery = document.querySelector('[data-placeholder]');
+const imageLoaders = new WeakMap();
+const imageObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    imageObserver.unobserve(entry.target);
+    imageLoaders.get(entry.target)?.();
+  }
+}, { rootMargin: '200px' });
 const qualityLabels = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
 const successStatuses = ['succeeded', 'completed', 'success'];
 const failureStatuses = ['failed', 'not_found', 'uncertain', 'canceled', 'cancelled'];
@@ -60,12 +72,21 @@ function setKey(value, persist = true) {
     balanceRequest = undefined;
     lastBalance = undefined;
     closeDashboardFrame();
+    for (const task of tasks) removeTaskCards(task);
+    tasks.length = 0;
+    nextHistory = undefined;
+    historyLoading = false;
+    managingTasks = false;
+    $('more-tasks').hidden = true;
+    $('history-note').textContent = '';
+    updateTaskCount();
   }
   key = value;
   $('open-key').toggleAttribute('data-ready', Boolean(value));
   $('key-label').textContent = value ? 'API Key 已设置' : '设置 API Key';
   renderBalance(lastBalance ?? (value ? '查询中…' : '—'));
   if (value) refreshBalance();
+  if (value) loadHistory(value);
   if (!$('dashboard-view').hidden) openDashboardFrame();
 }
 
@@ -185,15 +206,24 @@ function syncPrompt() {
 function updateTaskCount() {
   const active = tasks.filter((task) => task.running).length;
   $('result-badge').textContent = active ? active + ' 个进行中 / ' + tasks.length + ' 个任务' : tasks.length + ' 个任务';
+  emptyGallery.hidden = tasks.length !== 0;
+  const eligible = tasks.filter((task) => !task.running);
+  const selected = eligible.filter((task) => task.selection.checked);
+  $('manage-tasks').hidden = !eligible.length && !managingTasks;
+  $('manage-tasks').textContent = managingTasks ? '完成管理' : '管理任务';
+  $('delete-tasks').hidden = !managingTasks;
+  $('delete-tasks').disabled = !selected.length;
+  $('delete-tasks').textContent = selected.length ? '删除所选（' + selected.length + '）' : '删除所选';
+  for (const task of tasks) task.selection.parentElement.hidden = !managingTasks || task.running;
 }
 
 function galleryStep() {
-  const [first, second] = gallery.children;
+  const [first, second] = gallery.querySelectorAll(':scope > :not([hidden])');
   return second ? second.getBoundingClientRect().left - first.getBoundingClientRect().left : 1;
 }
 
 function syncGallery() {
-  const count = gallery.children.length;
+  const count = gallery.querySelectorAll(':scope > :not([hidden])').length;
   const max = Math.max(0, count - 2);
   const index = Math.min(max, Math.max(0, Math.round(gallery.scrollLeft / galleryStep())));
   slider.max = String(max || 1);
@@ -209,7 +239,7 @@ function syncGallery() {
 }
 
 function moveGallery(index, behavior = 'instant') {
-  const max = Math.max(0, gallery.children.length - 2);
+  const max = Math.max(0, gallery.querySelectorAll(':scope > :not([hidden])').length - 2);
   gallery.scrollTo({ left: Math.min(max, Math.max(0, index)) * galleryStep(), behavior });
   syncGallery();
 }
@@ -311,7 +341,7 @@ async function addReferenceFiles(files) {
   updateReferences();
 }
 
-function addTask(title, settings) {
+function addTask(title, settings, record = crypto.randomUUID(), append = false) {
   const node = $('task-template').content.firstElementChild.cloneNode(true);
   const task = {
     node,
@@ -321,6 +351,10 @@ function addTask(title, settings) {
     retry: node.querySelector('.poll-again'),
     placeholder: node.querySelector('.task-placeholder'),
     actions: node.querySelector('.image-actions'),
+    selection: node.querySelector('input[type=checkbox]'),
+    record,
+    cards: [node],
+    blobs: new Set(),
     running: false,
   };
   const heading = node.querySelector('h3');
@@ -330,11 +364,61 @@ function addTask(title, settings) {
   meta.textContent = settings || '';
   meta.hidden = !settings;
   task.retry.addEventListener('click', () => withKey(() => runPoll(task, key)));
-  if (!tasks.length) gallery.querySelectorAll('[data-placeholder]').forEach((item) => item.remove());
+  task.selection.setAttribute('aria-label', '选择任务 ' + title.slice(0, 100));
+  task.selection.addEventListener('change', updateTaskCount);
   tasks.push(task);
-  gallery.prepend(node);
-  moveGallery(0);
+  if (append) gallery.append(node);
+  else gallery.prepend(node);
+  updateTaskCount();
+  if (!append) moveGallery(0);
   return task;
+}
+
+function removeTaskCards(task) {
+  task.removed = true;
+  for (const card of task.cards) {
+    for (const image of card.querySelectorAll('img')) imageObserver.unobserve(image);
+    card.remove();
+  }
+  for (const url of task.blobs) URL.revokeObjectURL(url);
+}
+
+async function historyRequest(path, currentKey, payload) {
+  const response = await fetch(apiBase + path, {
+    method: payload ? 'POST' : 'GET',
+    headers: { Authorization: 'Bearer ' + currentKey, ...(payload && { 'Content-Type': 'application/json' }) },
+    body: payload && JSON.stringify(payload),
+    signal: AbortSignal.timeout(18000),
+  });
+  if (!response.ok) throw new Error('创作记录暂时无法访问。');
+  return response.json();
+}
+
+async function loadHistory(currentKey, more = false) {
+  if (historyLoading) return;
+  historyLoading = true;
+  const cursor = more && nextHistory ? '?' + new URLSearchParams({ before: nextHistory.created, record: nextHistory.record }) : '';
+  try {
+    const data = await historyRequest('history' + cursor, currentKey);
+    if (key !== currentKey) return;
+    for (const row of data.tasks) {
+      if (tasks.some((task) => task.record === row.record)) continue;
+      const task = addTask(row.prompt, row.settings, row.record, true);
+      task.id = row.id;
+      task.persisted = true;
+      if (row.images.length) showImages(task, row.images, currentKey, row.saving);
+      else if (row.status === 'pending' && row.id) runPoll(task, currentKey);
+      else setStatus(task, row.status === 'failed' ? '任务结束' : '提交未确认', row.error || '暂无任务回执。');
+    }
+    nextHistory = data.next;
+    $('more-tasks').hidden = !nextHistory;
+    $('history-note').textContent = '';
+    syncGallery();
+  } catch {
+    if (key === currentKey) $('history-note').textContent = '暂时无法加载历史记录，刷新页面可重试。';
+  } finally {
+    if (key === currentKey) historyLoading = false;
+  }
 }
 
 function setStatus(task, badge, message = '', retry = false) {
@@ -370,7 +454,7 @@ async function callApi(path, payload, currentKey) {
   return data;
 }
 
-function imageCardParts(task, url, index) {
+function imageCardParts(task, url, index, currentKey) {
   const thumbnail = document.createElement('button');
   thumbnail.type = 'button';
   thumbnail.className = 'thumbnail';
@@ -379,25 +463,48 @@ function imageCardParts(task, url, index) {
   image.alt = '生成结果 ' + (index + 1);
   image.loading = 'lazy';
   image.referrerPolicy = 'no-referrer';
-  image.src = url;
+  const archived = url.startsWith('history-image/');
+  if (!archived) image.src = url;
   const zoom = document.createElement('span');
   zoom.className = 'zoom';
   zoom.setAttribute('aria-hidden', 'true');
   zoom.textContent = '↗';
   thumbnail.append(image, zoom);
-  thumbnail.addEventListener('click', () => showPreview(url, image.alt));
+  thumbnail.addEventListener('click', () => {
+    if (image.getAttribute('src')) showPreview(image.src, image.alt);
+  });
   const original = document.createElement('a');
   original.textContent = '打开原图 ↗';
-  original.href = url;
+  if (!archived) original.href = url;
   original.target = '_blank';
   original.rel = 'noopener noreferrer';
   const save = document.createElement('button');
   save.type = 'button';
   save.textContent = '下载';
+  if (archived) {
+    save.disabled = true;
+    imageLoaders.set(image, () => fetch(apiBase + url, {
+      headers: { Authorization: 'Bearer ' + currentKey },
+      signal: AbortSignal.timeout(18000),
+    }).then((response) => {
+      if (!response.ok) throw new Error('Image unavailable');
+      return response.blob();
+    }).then((blob) => {
+      if (task.removed) return;
+      const objectUrl = URL.createObjectURL(blob);
+      task.blobs.add(objectUrl);
+      image.src = objectUrl;
+      original.href = objectUrl;
+      save.disabled = false;
+    }).catch(() => {
+      save.textContent = '图片读取失败';
+    }));
+    imageObserver.observe(image);
+  }
   save.addEventListener('click', async () => {
     save.disabled = true;
     try {
-      const response = await fetch(url, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+      const response = await fetch(image.src, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
       if (!response.ok) throw new Error('下载失败');
       const blob = await response.blob();
       const download = document.createElement('a');
@@ -418,12 +525,13 @@ function imageCardParts(task, url, index) {
   return { thumbnail, original, save };
 }
 
-function showImages(task, urls) {
-  setStatus(task, '已生成');
+function showImages(task, urls, currentKey, saving = false) {
+  if (task.removed || task.completed) return;
+  setStatus(task, '已生成', saving ? '正在留存原图…' : '');
   task.completed = true;
   let previous = task.node;
   urls.forEach((url, index) => {
-    const { thumbnail, original, save } = imageCardParts(task, url, index);
+    const { thumbnail, original, save } = imageCardParts(task, url, index, currentKey);
     if (index === 0) {
       task.placeholder.replaceWith(thumbnail);
       task.actions.append(original, save);
@@ -443,24 +551,58 @@ function showImages(task, urls) {
     content.append(heading, actions);
     card.append(thumbnail, content);
     previous.after(card);
+    task.cards.push(card);
     previous = card;
   });
   syncGallery();
+  if (saving) void checkArchive(task, currentKey);
+}
+
+async function checkArchive(task, currentKey) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    if (task.removed || key !== currentKey) return;
+    try {
+      const row = await historyRequest('history-record?record=' + task.record, currentKey);
+      if (!row.saving) {
+        if (task.removed) return;
+        for (const card of task.cards.slice(1)) {
+          for (const image of card.querySelectorAll('img')) imageObserver.unobserve(image);
+          card.remove();
+        }
+        const thumbnail = task.node.querySelector('.thumbnail');
+        imageObserver.unobserve(thumbnail.querySelector('img'));
+        thumbnail.replaceWith(task.placeholder);
+        task.cards.length = 1;
+        task.actions.replaceChildren();
+        task.completed = false;
+        for (const url of task.blobs) URL.revokeObjectURL(url);
+        task.blobs.clear();
+        showImages(task, row.images, currentKey);
+        return;
+      }
+    } catch {
+      // Retain the visible result while the server retries the copy.
+    }
+  }
+  if (!task.removed) setStatus(task, '已生成', '原图留存尚未确认，可先下载。');
 }
 
 async function poll(task, currentKey) {
   const until = Date.now() + 15 * 60 * 1000;
   setStatus(task, '进行中', '正在等待生成结果…');
   while (Date.now() < until) {
+    if (task.removed) return;
     let data;
     try {
-      data = await callApi('task', { id: task.id }, currentKey);
+      data = await callApi('task', { id: task.id, record: task.record, import: !task.persisted }, currentKey);
+      task.persisted = true;
     } catch (error) {
       setStatus(task, '查询暂停', error.message, true);
       return;
     }
     if (data.images?.length && successStatuses.includes(data.status)) {
-      showImages(task, data.images);
+      showImages(task, data.images, currentKey, data.saving ?? true);
       return;
     }
     if (failureStatuses.includes(data.status) || successStatuses.includes(data.status)) {
@@ -491,10 +633,11 @@ async function submit(input, currentKey) {
   setRunning(task, true);
   setStatus(task, '正在提交', '正在提交生图任务…');
   try {
-    const data = await callApi('generate', input, currentKey);
+    const data = await callApi('generate', { ...input, record: task.record }, currentKey);
+    task.persisted = true;
     if (currentKey === key) refreshBalance();
     if (isTaskId(data.id)) task.id = data.id;
-    if (data.images?.length) showImages(task, data.images);
+    if (data.images?.length) showImages(task, data.images, currentKey, data.saving ?? true);
     else if (task.id) await poll(task, currentKey);
     else setStatus(task, '提交未确认', '未收到任务 ID。请先核对任务记录，避免重复生成。');
   } catch (error) {
@@ -514,6 +657,43 @@ new ResizeObserver(syncGallery).observe(gallery);
 slider.addEventListener('input', () => moveGallery(Number(slider.value)));
 $('gallery-prev').addEventListener('click', () => moveGallery(Number(slider.value) - 2));
 $('gallery-next').addEventListener('click', () => moveGallery(Number(slider.value) + 2));
+$('more-tasks').addEventListener('click', () => { if (key) loadHistory(key, true); });
+$('manage-tasks').addEventListener('click', () => {
+  managingTasks = !managingTasks;
+  for (const task of tasks) task.selection.checked = false;
+  updateTaskCount();
+});
+$('delete-tasks').addEventListener('click', () => {
+  const count = tasks.filter((task) => !task.running && task.selection.checked).length;
+  if (!count) return;
+  $('delete-dialog').returnValue = '';
+  $('delete-description').textContent = '删除这 ' + count + ' 条创作记录及本站留存的图片？此操作不可撤销。';
+  $('delete-dialog').showModal();
+});
+$('delete-dialog').addEventListener('close', async () => {
+  if ($('delete-dialog').returnValue !== 'delete' || !key) return;
+  const currentKey = key;
+  const selected = tasks.filter((task) => !task.running && task.selection.checked);
+  $('history-note').textContent = '';
+  try {
+    for (let start = 0; start < selected.length; start += 60) {
+      const batch = selected.slice(start, start + 60);
+      await historyRequest('history-delete', currentKey, { records: batch.map((task) => task.record) });
+      if (currentKey !== key) return;
+      for (const task of batch) {
+        if (!tasks.includes(task)) continue;
+        removeTaskCards(task);
+        tasks.splice(tasks.indexOf(task), 1);
+      }
+      updateTaskCount();
+      syncGallery();
+    }
+    managingTasks = false;
+    updateTaskCount();
+  } catch {
+    if (currentKey === key) $('history-note').textContent = '暂时无法删除所选记录，请重试。';
+  }
+});
 $('close-preview').addEventListener('click', () => $('image-dialog').close());
 $('image-dialog').addEventListener('close', () => $('preview-image').removeAttribute('src'));
 $('model').addEventListener('change', syncModel);

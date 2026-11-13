@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences } from './site/models.js';
+import { setTimeout as delay } from 'node:timers/promises';
+import { creditLabel, generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences, models } from './site/models.js';
+import { createRecord, deleteRecords, history, ownerFor, readImage, readRecord, saveRecord } from './archive.mjs';
 
 const port = Number(process.env.PORT || 4317);
 const pagesOrigin = process.env.PAGES_ORIGIN || 'https://vinisdiao1-lang.github.io';
@@ -135,6 +137,85 @@ function providerMessage(data, fallback, key) {
     .slice(0, 350);
 }
 
+const recordPattern = /^[a-f0-9-]{36}$/;
+const serverPolls = new Set();
+const successStatuses = ['succeeded', 'completed', 'success'];
+const terminalStatuses = ['failed', 'not_found', 'canceled', 'cancelled'];
+
+function startPolling(owner, record, id, key) {
+  const job = owner + record;
+  if (!id || serverPolls.has(job) || serverPolls.size >= 40) return;
+  serverPolls.add(job);
+  void (async () => {
+    let wait = 3000;
+    const end = Date.now() + 20 * 60 * 1000;
+    try {
+      while (Date.now() < end) {
+        await delay(wait, undefined, { ref: false });
+        if (readRecord(owner, record)?.status !== 'pending') return;
+        try {
+          const response = await fetch(upstream + '/v1/tasks/batch-get', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [id] }),
+            signal: AbortSignal.timeout(12000),
+            redirect: 'error',
+          });
+          if (!response.ok) throw new Error('Task query failed');
+          const data = await response.json();
+          const task = data?.items?.find((item) => item.id === id);
+          const images = resultImages(task);
+          if (successStatuses.includes(task?.status) && images.length) {
+            saveRecord(owner, record, { status: 'succeeded', images });
+            return;
+          }
+          if (terminalStatuses.includes(task?.status)) {
+            saveRecord(owner, record, { status: 'failed', error: providerMessage(task, '任务未完成。', key) });
+            return;
+          }
+          wait = Math.max(5000, Math.min(60000, Number(data.next_poll_after_ms) || 10000));
+        } catch {
+          wait = 20000;
+        }
+      }
+    } finally {
+      serverPolls.delete(job);
+    }
+  })().catch(() => {});
+}
+
+async function archiveApi(request, response, path, key, search) {
+  const owner = ownerFor(key);
+  if (path === 'history') {
+    const before = Number(search.get('before')) || Number.MAX_SAFE_INTEGER;
+    const cursor = search.get('record') || 'z';
+    return send(response, 200, history(owner, before, cursor));
+  }
+  if (path === 'history-delete') {
+    const { records } = await readJson(request, 8192);
+    if (!Array.isArray(records) || records.length > 60 || records.some((value) => typeof value !== 'string' || !recordPattern.test(value))) {
+      return send(response, 400, { error: '请选择有效的任务。' });
+    }
+    deleteRecords(owner, records);
+    return send(response, 200, { ok: true });
+  }
+  if (path === 'history-record') {
+    const record = search.get('record');
+    const task = recordPattern.test(record) ? readRecord(owner, record) : null;
+    if (!task) return send(response, 404, { error: '任务已删除或不存在。' });
+    if (task.status === 'pending') startPolling(owner, record, task.id, key);
+    return send(response, 200, task);
+  }
+  const match = path.match(/^history-image\/([a-f0-9-]{36})\/(\d{1,2})$/);
+  const image = match && readImage(owner, match[1], Number(match[2]));
+  if (!image) return send(response, 404, { error: '图片已删除或不存在。' });
+  response.writeHead(200, {
+    'Content-Type': image.mime, 'Content-Length': image.bytes.length,
+    'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+  });
+  response.end(image.bytes);
+}
+
 async function sendBalance(response, key) {
   try {
     const upstreamResponses = await Promise.all(billingPaths.map((path) => fetch(billingOrigin + path, {
@@ -162,7 +243,7 @@ async function sendBalance(response, key) {
   }
 }
 
-async function api(request, response, path) {
+async function api(request, response, path, search) {
   if (path.startsWith('reference/')) return serveReference(request, response, path.slice('reference/'.length));
   const origin = request.headers.origin;
   const selfOrigin = 'http://127.0.0.1:' + port;
@@ -177,25 +258,51 @@ async function api(request, response, path) {
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   }
   if (request.method === 'GET' && path === 'health') return send(response, 200, { status: 'ok' });
-  if (!['generate', 'task', 'balance'].includes(path)) return send(response, 404, { error: '接口不存在。' });
+  const isArchive = ['history', 'history-record', 'history-delete'].includes(path) || path.startsWith('history-image/');
+  if (!isArchive && !['generate', 'task', 'balance'].includes(path)) return send(response, 404, { error: '接口不存在。' });
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
     return response.end();
   }
-  const method = path === 'balance' ? 'GET' : 'POST';
+  const method = path === 'balance' || (isArchive && path !== 'history-delete') ? 'GET' : 'POST';
   if (request.method !== method) return send(response, 405, { error: '此接口只接受 ' + method + ' 请求。' });
 
   const match = request.headers.authorization?.match(/^Bearer ([!-~]{1,512})$/);
   if (!match) return send(response, 401, { error: '请先设置有效的 API Key。' });
   const key = match[1];
   if (path === 'balance') return sendBalance(response, key);
+  if (isArchive) {
+    try {
+      return await archiveApi(request, response, path, key, search);
+    } catch (error) {
+      return send(response, error instanceof SyntaxError ? 400 : 500, { error: '暂时无法处理创作记录。' });
+    }
+  }
+  const owner = ownerFor(key);
   let outbound;
+  let record;
   try {
     const input = await readJson(request, path === 'generate' ? 9 * 1024 * 1024 : 64 * 1024);
     if (path === 'generate') {
       outbound = generationWithReferences(input);
+      if (input.record != null) {
+        if (typeof input.record !== 'string' || !recordPattern.test(input.record)) throw new Error('创作记录编号无效。');
+        record = input.record;
+        const existing = readRecord(owner, record);
+        if (existing) return send(response, 200, existing);
+        const model = models.find((item) => item.id === input.model);
+        const settings = model ? [model.name, input.ratio, input.size, creditLabel(model, input.quality)].join(' · ') : '';
+        createRecord(owner, record, null, input.prompt.trim(), settings);
+      }
     } else {
       if (!isTaskId(input?.id)) throw new Error('请检查任务 ID。');
+      if (typeof input.record === 'string' && recordPattern.test(input.record)) {
+        record = input.record;
+        if (input.import === true) createRecord(owner, record, input.id, '查询已有任务', '');
+        const existing = readRecord(owner, record);
+        if (!existing || existing.id !== input.id) return send(response, 404, { error: '任务已删除或不存在。' });
+        if (existing.status === 'succeeded') return send(response, 200, existing);
+      }
       outbound = { path: '/v1/tasks/batch-get', body: { ids: [input.id] } };
     }
   } catch (error) {
@@ -213,18 +320,31 @@ async function api(request, response, path) {
     const data = await upstreamResponse.json().catch(() => null);
     if (!upstreamResponse.ok) {
       const status = upstreamResponse.status;
-      return send(response, status, { error: providerMessage(data, '生图服务返回 HTTP ' + status + '。', key) });
+      const error = providerMessage(data, '生图服务返回 HTTP ' + status + '。', key);
+      if (record && path === 'generate') saveRecord(owner, record, { status: 'failed', error });
+      return send(response, status, { error });
     }
-    if (data?.error) return send(response, 502, { error: providerMessage(data, '生图服务返回了接口错误。', key) });
+    if (data?.error) {
+      const error = providerMessage(data, '生图服务返回了接口错误。', key);
+      if (record && path === 'generate') saveRecord(owner, record, { status: 'failed', error });
+      return send(response, 502, { error });
+    }
 
     if (path === 'generate') {
       const id = data?.id ?? data?.task_id ?? data?.data?.id ?? data?.data?.task_id;
       const status = data?.status ?? data?.data?.status;
       if (isTaskId(id) && !['succeeded', 'completed', 'success'].includes(status)) {
+        if (record) {
+          saveRecord(owner, record, { id, status: 'pending' });
+          startPolling(owner, record, id, key);
+        }
         return send(response, 200, { id, status: 'pending' });
       }
       const images = resultImages(data);
-      if (images.length) return send(response, 200, { status: 'succeeded', images });
+      if (images.length) {
+        if (record) saveRecord(owner, record, { id: isTaskId(id) ? id : null, status: 'succeeded', images });
+        return send(response, 200, { status: 'succeeded', images });
+      }
       if (!isTaskId(id)) return send(response, 502, { error: '未收到可识别的任务 ID。请先核对任务记录，避免重复生成。' });
       return send(response, 200, { id, status: 'pending' });
     }
@@ -232,10 +352,16 @@ async function api(request, response, path) {
     const id = outbound.body.ids[0];
     const task = data?.items?.find((item) => item.id === id);
     if (!task) return send(response, 502, { error: '暂时无法读取这条任务的状态。' });
+    const images = resultImages(task);
+    if (record && successStatuses.includes(task.status) && images.length) {
+      saveRecord(owner, record, { id, status: 'succeeded', images });
+    } else if (record && terminalStatuses.includes(task.status)) {
+      saveRecord(owner, record, { status: 'failed', error: providerMessage(task, '任务未完成。', key) });
+    }
     return send(response, 200, {
       id,
       status: task.status,
-      images: resultImages(task),
+      images,
       nextPoll: data.next_poll_after_ms,
       error: task.error ? providerMessage(task, '服务未返回任务失败原因。', key) : undefined,
     });
@@ -247,8 +373,8 @@ async function api(request, response, path) {
 }
 
 createServer(async (request, response) => {
-  const path = new URL(request.url, 'http://localhost').pathname;
-  if (path.startsWith(prefix)) return api(request, response, path.slice(prefix.length));
+  const { pathname: path, searchParams } = new URL(request.url, 'http://localhost');
+  if (path.startsWith(prefix)) return api(request, response, path.slice(prefix.length), searchParams);
   const asset = assets.get(path);
   if (process.env.API_ONLY === '1' || !asset || request.method !== 'GET') return send(response, 404, { error: '页面不存在。' });
   try {

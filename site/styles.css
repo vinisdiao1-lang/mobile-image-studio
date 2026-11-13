@@ -42,6 +42,12 @@ button:disabled { cursor: default; opacity: .46; }
 .workspace { max-width: 1136px; margin: auto; padding: 24px 24px 40px; display: grid; gap: 16px; }
 .gallery-heading, .section-title, .gallery-arrows { display: flex; align-items: center; }
 .gallery-heading { justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.history-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.history-controls button { margin-bottom: 8px; font-size: 13px; min-height: 36px; }
+.task { position: relative; }
+.task-select { position: absolute; z-index: 1; top: 7px; left: 7px; padding: 5px; background: white; border-radius: 8px; }
+.task-select input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.danger, #delete-tasks { color: #9b322c; }
 .section-title { flex-wrap: wrap; column-gap: 10px; row-gap: 3px; }
 .section-title h1 { font-size: clamp(19px, 3vw, 24px); letter-spacing: -.035em; }
 #result-badge { color: var(--muted); font-size: 13px; }
