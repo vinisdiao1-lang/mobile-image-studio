@@ -113,9 +113,13 @@ async function api(request, response, path) {
     if (data?.error) return send(response, 502, { error: providerMessage(data, '新宝返回了接口错误。', key) });
 
     if (path === 'generate') {
+      const id = data?.id ?? data?.task_id ?? data?.data?.id ?? data?.data?.task_id;
+      const status = data?.status ?? data?.data?.status;
+      if (isTaskId(id) && !['succeeded', 'completed', 'success'].includes(status)) {
+        return send(response, 200, { id, status: 'pending' });
+      }
       const images = resultImages(data);
       if (images.length) return send(response, 200, { status: 'succeeded', images });
-      const id = data?.id ?? data?.task_id ?? data?.data?.id ?? data?.data?.task_id;
       if (!isTaskId(id)) return send(response, 502, { error: '新宝未返回可识别的任务 ID。请先检查新宝的任务记录。' });
       return send(response, 200, { id, status: 'pending' });
     }
