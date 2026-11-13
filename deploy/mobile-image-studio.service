@@ -1,0 +1,18 @@
+[Unit]
+Description=Mobile Image Studio API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/mobile-image-studio
+Environment=API_ONLY=1
+Environment=PORT=4317
+ExecStart=/usr/bin/node /home/ubuntu/mobile-image-studio/server.mjs
+Restart=on-failure
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

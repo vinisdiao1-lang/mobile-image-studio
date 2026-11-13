@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#121318">
+  <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>微光 · AI 生图</title>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"> 微光</a>
+    <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
+  </header>
+  <main>
+    <div class="intro">
+      <h1>AI 生图<span>.</span></h1>
+      <p>写下你想看到的画面，或用参考图指定方向。</p>
+    </div>
+    <div class="workspace">
+      <form id="create" class="panel composer">
+        <h2>创作设置</h2>
+        <label for="prompt">提示词</label>
+        <div class="prompt-box">
+          <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
+          <div class="prompt-actions"><button id="example-button" type="button" class="link">试用示例提示词</button><output id="count" for="prompt">0 / 8000</output></div>
+        </div>
+        <label for="model">模型</label>
+        <select id="model"></select>
+        <div class="settings">
+          <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
+          <div><label for="size">分辨率</label><select id="size"></select></div>
+          <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
+        </div>
+        <details class="references">
+          <summary>参考图链接 <span>可选</span></summary>
+          <label for="references">每行一个公网 HTTP(S) 图片链接，最多 6 张</label>
+          <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
+        </details>
+        <button class="primary" id="generate" type="submit"><span aria-hidden="true">✦</span> 生成图片</button>
+        <p class="notice" id="form-note" role="status"></p>
+      </form>
+      <section class="panel result" aria-labelledby="result-title">
+        <div class="panel-heading"><h2 id="result-title">画布</h2><span id="result-badge">示例图</span></div>
+        <figure id="sample">
+          <img src="./example.jpg" width="1200" height="800" alt="暮色中的火山湖倒映铜色霞光，远处山间有薄雾和一轮月亮">
+          <figcaption>山湖暮光</figcaption>
+        </figure>
+        <div id="pending" class="pending" hidden>
+          <div class="pending-mark" aria-hidden="true">✦</div>
+          <p id="task-status" role="status" aria-live="polite"></p>
+          <p id="task-id" class="task-id"></p>
+          <button id="poll-again" type="button" hidden>继续查询</button>
+        </div>
+        <div id="images" class="images" hidden></div>
+        <details class="resume">
+          <summary>查询已有任务</summary>
+          <form id="resume"><label for="resume-id">任务 ID</label><div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div></form>
+        </details>
+      </section>
+    </div>
+  </main>
+  <dialog id="key-dialog">
+    <form id="key-form">
+      <div class="panel-heading"><h2>新宝 API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
+      <p>Key 仅在本次页面打开期间有效。提交和查询时会通过 HTTPS 转发给新宝。</p>
+      <label for="api-key">API Key</label>
+      <input id="api-key" type="password" maxlength="512" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入你的新宝 API Key">
+      <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
+    </form>
+  </dialog>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
