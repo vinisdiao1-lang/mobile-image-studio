@@ -5,6 +5,9 @@ const apiBase = location.hostname === '127.0.0.1' ? '/mobile-image-api/' : remot
 const $ = (id) => document.getElementById(id);
 let key = '';
 let afterKey;
+let balanceRequest;
+let lastBalance;
+const pointFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 });
 const tasks = [];
 const qualityLabels = { low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高' };
 const successStatuses = ['succeeded', 'completed', 'success'];
@@ -38,9 +41,49 @@ function syncCredits() {
 }
 
 function setKey(value) {
+  if (value !== key) {
+    balanceRequest?.abort();
+    balanceRequest = undefined;
+    lastBalance = undefined;
+  }
   key = value;
   $('open-key').toggleAttribute('data-ready', Boolean(value));
   $('key-label').textContent = value ? 'API Key 已设置' : '设置 API Key';
+  $('dashboard-key').hidden = !value;
+  renderBalance(lastBalance ?? (value ? '查询中…' : '—'));
+  if (value) refreshBalance();
+}
+
+function renderBalance(value, error = '') {
+  $('balance-value').textContent = value;
+  $('balance-refresh').toggleAttribute('data-error', Boolean(error));
+  $('balance-refresh').title = error || '刷新积分余额';
+  $('balance-refresh').setAttribute('aria-label', error ? '剩余积分 ' + value + '，' + error : '剩余积分 ' + value + '，点击刷新');
+}
+
+async function refreshBalance() {
+  if (!key || balanceRequest) return;
+  const controller = new AbortController();
+  balanceRequest = controller;
+  try {
+    const response = await fetch(apiBase + 'balance', {
+      headers: { Authorization: 'Bearer ' + key },
+      cache: 'no-store',
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+    });
+    const data = await response.json();
+    if (!response.ok || (!data.unlimited && !Number.isFinite(data.remaining))) {
+      throw new Error(data?.error || '暂时无法查询积分余额。');
+    }
+    if (balanceRequest !== controller) return;
+    lastBalance = data.unlimited ? '无限' : pointFormat.format(data.remaining);
+    renderBalance(lastBalance);
+  } catch (error) {
+    if (balanceRequest !== controller) return;
+    renderBalance(lastBalance === undefined ? '查询失败' : lastBalance + ' · 未更新', error.message);
+  } finally {
+    if (balanceRequest === controller) balanceRequest = undefined;
+  }
 }
 
 function openKey(callback) {
@@ -368,6 +411,7 @@ async function submit(input, currentKey) {
   setStatus(task, '正在提交', '正在提交生图任务…');
   try {
     const data = await callApi('generate', input, currentKey);
+    if (currentKey === key) refreshBalance();
     if (isTaskId(data.id)) task.id = data.id;
     if (data.images?.length) showImages(task, data.images);
     else if (task.id) await poll(task, currentKey);
@@ -376,6 +420,7 @@ async function submit(input, currentKey) {
     setStatus(task, '提交未完成', error.message);
   } finally {
     setRunning(task, false);
+    if (currentKey === key) refreshBalance();
   }
 }
 
@@ -417,6 +462,25 @@ document.addEventListener('drop', (event) => {
   if (composer.contains(event.target)) addReferenceFiles([...event.dataTransfer.files]);
 });
 $('open-key').addEventListener('click', () => openKey());
+$('balance-refresh').addEventListener('click', () => withKey(refreshBalance));
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshBalance();
+});
+setInterval(() => {
+  if (!document.hidden) refreshBalance();
+}, 20000);
+$('copy-key').addEventListener('click', async () => {
+  if (!key) return;
+  try {
+    await navigator.clipboard.writeText(key);
+    $('copy-key-status').textContent = '已复制，请到任务看板粘贴。';
+  } catch {
+    $('api-key').value = key;
+    $('api-key').focus();
+    $('api-key').select();
+    $('copy-key-status').textContent = '浏览器未允许自动复制，请手动复制已选中的 Key。';
+  }
+});
 $('close-key').addEventListener('click', () => $('key-dialog').close());
 $('clear-key').addEventListener('click', () => {
   setKey('');
@@ -425,6 +489,7 @@ $('clear-key').addEventListener('click', () => {
 $('key-dialog').addEventListener('close', () => {
   afterKey = undefined;
   $('api-key').value = '';
+  $('copy-key-status').textContent = '';
 });
 $('key-form').addEventListener('submit', (event) => {
   event.preventDefault();

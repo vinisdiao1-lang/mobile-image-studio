@@ -6,6 +6,12 @@ import { generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences
 const port = Number(process.env.PORT || 4317);
 const pagesOrigin = process.env.PAGES_ORIGIN || 'https://vinisdiao1-lang.github.io';
 const upstream = 'https://async.xinbao-ai.com';
+const billingOrigin = 'https://api.xinbao-ai.com';
+const billingPaths = [
+  '/v1/dashboard/billing/subscription',
+  '/v1/dashboard/billing/usage?start_date=1970-01-01&end_date=2099-12-31',
+];
+const pointsPerDollar = 60;
 const prefix = '/mobile-image-api/';
 const publicApi = 'https://new.linlangai88.cn' + prefix;
 const referenceLifetime = 60 * 60 * 1000;
@@ -129,6 +135,33 @@ function providerMessage(data, fallback, key) {
     .slice(0, 350);
 }
 
+async function sendBalance(response, key) {
+  try {
+    const upstreamResponses = await Promise.all(billingPaths.map((path) => fetch(billingOrigin + path, {
+      headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+      redirect: 'error',
+    })));
+    const statuses = upstreamResponses.map((result) => result.status);
+    if (statuses.some((status) => status === 401 || status === 403)) {
+      return send(response, 401, { error: 'API Key 无效或没有余额查询权限。' });
+    }
+    if (statuses.includes(429)) return send(response, 429, { error: '余额查询过于频繁，请稍后重试。' });
+    if (upstreamResponses.some((result) => !result.ok)) throw new Error('Billing request failed');
+    const [subscription, usage] = await Promise.all(upstreamResponses.map((result) => result.json()));
+    const limit = subscription?.hard_limit_usd;
+    const used = usage?.total_usage;
+    if (subscription?.error || usage?.error || !Number.isFinite(limit) || !Number.isFinite(used)) {
+      throw new Error('Unexpected billing response');
+    }
+    const unlimited = limit === 100_000_000;
+    const remaining = unlimited ? null : Math.max(0, (limit - used / 100) * pointsPerDollar);
+    return send(response, 200, { remaining, unlimited });
+  } catch {
+    return send(response, 502, { error: '暂时无法查询积分余额，请稍后重试。' });
+  }
+}
+
 async function api(request, response, path) {
   if (path.startsWith('reference/')) return serveReference(request, response, path.slice('reference/'.length));
   const origin = request.headers.origin;
@@ -141,19 +174,21 @@ async function api(request, response, path) {
   if (origin) {
     response.setHeader('Access-Control-Allow-Origin', origin);
     response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-    response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   }
   if (request.method === 'GET' && path === 'health') return send(response, 200, { status: 'ok' });
-  if (!['generate', 'task'].includes(path)) return send(response, 404, { error: '接口不存在。' });
+  if (!['generate', 'task', 'balance'].includes(path)) return send(response, 404, { error: '接口不存在。' });
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
     return response.end();
   }
-  if (request.method !== 'POST') return send(response, 405, { error: '此接口只接受 POST 请求。' });
+  const method = path === 'balance' ? 'GET' : 'POST';
+  if (request.method !== method) return send(response, 405, { error: '此接口只接受 ' + method + ' 请求。' });
 
   const match = request.headers.authorization?.match(/^Bearer ([!-~]{1,512})$/);
   if (!match) return send(response, 401, { error: '请先设置有效的 API Key。' });
   const key = match[1];
+  if (path === 'balance') return sendBalance(response, key);
   let outbound;
   try {
     const input = await readJson(request, path === 'generate' ? 9 * 1024 * 1024 : 64 * 1024);

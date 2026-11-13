@@ -6,14 +6,20 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=5">
+  <link rel="stylesheet" href="./styles.css?v=6">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
   <header class="top">
     <div class="top-inner">
       <a class="brand" href="./"><img src="./icon.svg?v=4" alt="" width="34" height="34">密码象</a>
-      <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
+      <div class="top-actions">
+        <button id="balance-refresh" type="button" class="balance-button" title="刷新积分余额">
+          <span>剩余积分</span> <strong id="balance-value" role="status">—</strong>
+        </button>
+        <a id="dashboard-link" class="dashboard-link" href="https://task.imagesave.cn/" target="_blank" rel="noopener noreferrer">任务看板 ↗</a>
+        <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
+      </div>
     </div>
   </header>
   <main class="workspace">
@@ -101,12 +107,18 @@
   <dialog id="key-dialog" aria-labelledby="key-title">
     <form id="key-form">
       <div class="panel-heading"><h2 id="key-title">API Key</h2><button id="close-key" type="button" aria-label="关闭">×</button></div>
-      <p>Key 仅保存在当前页面，用于通过 HTTPS 提交和查询任务。</p>
+      <p>Key 仅保存在当前页面，用于查询积分和提交任务。</p>
+      <div id="dashboard-key" class="dashboard-key" hidden>
+        <p>首次打开任务看板时，复制当前 Key 并粘贴到看板登录页。看板会在该浏览器内记住 Key。</p>
+        <button id="copy-key" type="button">复制当前 Key</button>
+        <a class="dashboard-link" href="https://task.imagesave.cn/" target="_blank" rel="noopener noreferrer">打开任务看板 ↗</a>
+        <p id="copy-key-status" role="status"></p>
+      </div>
       <label for="api-key">API Key</label>
       <input id="api-key" type="password" maxlength="512" required autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="输入你的 API Key">
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=5"></script>
+  <script type="module" src="./app.js?v=6"></script>
 </body>
 </html>
