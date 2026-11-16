@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=11">
+  <link rel="stylesheet" href="./styles.css?v=12">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -117,6 +117,13 @@
       </div>
     </article>
   </template>
+  <template id="download-icon-template">
+    <button type="button" class="card-download" aria-label="下载图片" title="下载图片">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/>
+      </svg>
+    </button>
+  </template>
   <div id="task-menu" class="task-menu" role="group" aria-label="图片操作" popover="auto">
     <button type="button" data-task-action="repeat">重刷</button>
     <button type="button" data-task-action="reference">添加到参考图</button>
@@ -165,6 +172,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=11"></script>
+  <script type="module" src="./app.js?v=12"></script>
 </body>
 </html>

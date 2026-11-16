@@ -272,26 +272,18 @@ function showTaskDetails(task, image, index) {
 }
 
 async function downloadResult({ task, image, index }) {
-  const button = $('details-download');
-  button.disabled = true;
-  try {
-    const response = await fetch(image.src, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('下载失败');
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    const objectUrl = URL.createObjectURL(blob);
-    const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
-    link.href = objectUrl;
-    link.download = '密码象-' + (task.id || task.number || task.record) + '-' + (index + 1) + '.' + extension;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
-  } catch {
-    if (activeDetails?.task === task) button.textContent = '请打开原图保存';
-  } finally {
-    if (activeDetails?.task === task) updateDetails();
-  }
+  const response = await fetch(image.src, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error('下载失败');
+  const blob = await response.blob();
+  const link = document.createElement('a');
+  const objectUrl = URL.createObjectURL(blob);
+  const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
+  link.href = objectUrl;
+  link.download = '密码象-' + (task.id || task.number || task.record) + '-' + (index + 1) + '.' + extension;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
 }
 
 function referenceLinks() {
@@ -565,6 +557,19 @@ function imageCardParts(task, url, index, currentKey) {
   image.referrerPolicy = 'no-referrer';
   const archived = url.startsWith('history-image/');
   if (!archived) image.src = url;
+  const download = $('download-icon-template').content.firstElementChild.cloneNode(true);
+  download.disabled = archived;
+  download.addEventListener('click', async () => {
+    download.disabled = true;
+    $('history-note').textContent = '';
+    try {
+      await downloadResult({ task, image, index });
+    } catch {
+      if (!task.removed) $('history-note').textContent = '下载失败，请重试或打开原图保存。';
+    } finally {
+      download.disabled = false;
+    }
+  });
   const zoom = document.createElement('span');
   zoom.className = 'zoom';
   zoom.setAttribute('aria-hidden', 'true');
@@ -583,6 +588,7 @@ function imageCardParts(task, url, index, currentKey) {
       const objectUrl = URL.createObjectURL(blob);
       task.blobs.add(objectUrl);
       image.src = objectUrl;
+      download.disabled = false;
       if (activeDetails?.image === image) updateDetails();
     }).catch(() => {
       if (activeDetails?.image === image) {
@@ -604,7 +610,10 @@ function imageCardParts(task, url, index, currentKey) {
     const rect = more.getBoundingClientRect();
     openMenu(rect.left, rect.bottom);
   });
-  preview.append(thumbnail, more);
+  const tools = document.createElement('div');
+  tools.className = 'card-actions';
+  tools.append(more, download);
+  preview.append(thumbnail, tools);
   return { preview, image, openMenu };
 }
 
@@ -865,8 +874,18 @@ $('details-preview').addEventListener('click', () => {
   const image = activeDetails?.image;
   if (image?.getAttribute('src')) showPreview(image.src, image.alt);
 });
-$('details-download').addEventListener('click', () => {
-  if (activeDetails) void downloadResult(activeDetails);
+$('details-download').addEventListener('click', async (event) => {
+  const details = activeDetails;
+  if (!details) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    await downloadResult(details);
+  } catch {
+    if (activeDetails === details) button.textContent = '请打开原图保存';
+  } finally {
+    if (activeDetails === details) updateDetails();
+  }
 });
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);

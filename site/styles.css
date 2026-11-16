@@ -101,7 +101,8 @@ summary span { margin-left: 4px; color: var(--muted); font-weight: 450; }
 .task-menu { position: fixed; inset: auto; margin: 0; padding: 5px; min-width: 160px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: inherit; box-shadow: 0 8px 24px #254e8030; }
 .task-menu button { display: block; text-align: left; width: 100%; min-height: 36px; background: transparent; border-color: transparent; font-size: 13px; }
 .task-menu button:hover, .task-menu button:focus-visible { background: var(--inset); }
-.more-actions { position: absolute; bottom: 8px; right: 8px; z-index: 1; min-height: 32px; min-width: 34px; padding: 0 5px; background: #f8fbfff2; }
+.card-actions { position: absolute; bottom: 8px; right: 8px; z-index: 1; display: flex; gap: 5px; }
+.card-actions button { display: grid; place-items: center; width: 36px; min-height: 36px; padding: 0; background: #f8fbfff2; color: var(--accent-dark); }
 .image-preview { position: relative; }
 @media (hover: hover) {
   .image-preview .more-actions { opacity: 0; }
