@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=16">
+  <link rel="stylesheet" href="./styles.css?v=17">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -48,14 +48,6 @@
           <p>生成的图片会显示在这里</p>
         </div>
       </div>
-      <details class="resume">
-        <summary>查询已有任务</summary>
-        <form id="resume">
-          <label for="resume-id">任务 ID</label>
-          <div class="resume-fields"><input id="resume-id" required maxlength="180" spellcheck="false" autocapitalize="off" placeholder="粘贴任务 ID"><button type="submit">查询</button></div>
-          <p class="notice" id="resume-note" role="status"></p>
-        </form>
-      </details>
     </section>
     <form id="create" class="composer" aria-labelledby="composer-title">
       <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
@@ -183,6 +175,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=14"></script>
+  <script type="module" src="./app.js?v=15"></script>
 </body>
 </html>

@@ -1061,21 +1061,3 @@ composer.addEventListener('submit', (event) => {
     $('form-note').textContent = error.message;
   }
 });
-$('resume').addEventListener('submit', (event) => {
-  event.preventDefault();
-  $('resume-note').textContent = '';
-  const id = $('resume-id').value.trim();
-  if (!isTaskId(id)) {
-    $('resume-note').textContent = '请检查任务 ID。';
-    return;
-  }
-  withKey(() => {
-    let task = tasks.find((item) => item.id === id);
-    if (!task) {
-      task = addTask('查询已有任务');
-      task.id = id;
-    }
-    task.node.scrollIntoView({ block: 'nearest' });
-    if (!task.completed) runPoll(task, key);
-  });
-});
