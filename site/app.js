@@ -212,8 +212,27 @@ function syncPrompt() {
 function toggleComposer(expanded) {
   $('composer-panel').hidden = !expanded;
   $('collapsed-prompt').hidden = expanded;
+  $('composer-size').hidden = !expanded;
   $('toggle-composer').setAttribute('aria-expanded', String(expanded));
   $('toggle-composer').textContent = expanded ? '收起输入栏 ⌄' : '展开输入栏 ⌃';
+}
+
+function maxPromptHeight() {
+  return Math.max(64, Math.min(400, document.documentElement.clientHeight * 0.46));
+}
+
+function syncComposerSize() {
+  const height = $('prompt').getBoundingClientRect().height;
+  if (!height) return;
+  $('composer-smaller').disabled = height <= 64;
+  $('composer-larger').disabled = height >= maxPromptHeight() - 1;
+}
+
+function resizeComposer(change) {
+  const prompt = $('prompt');
+  const height = Math.max(64, Math.min(maxPromptHeight(), prompt.getBoundingClientRect().height + change));
+  prompt.style.height = height + 'px';
+  syncComposerSize();
 }
 
 function updateTaskCount() {
@@ -846,6 +865,9 @@ $('preview-size').addEventListener('input', (event) => setPreviewSize(Number(eve
 $('zoom-out').addEventListener('click', () => setPreviewSize(Number($('preview-size').value) - 10));
 $('zoom-in').addEventListener('click', () => setPreviewSize(Number($('preview-size').value) + 10));
 $('toggle-composer').addEventListener('click', () => toggleComposer($('composer-panel').hidden));
+$('composer-smaller').addEventListener('click', () => resizeComposer(-48));
+$('composer-larger').addEventListener('click', () => resizeComposer(48));
+new ResizeObserver(syncComposerSize).observe($('prompt'));
 taskMenu.addEventListener('click', (event) => {
   const action = event.target.closest('[data-task-action]')?.dataset.taskAction;
   if (!action || !menuTarget) return;

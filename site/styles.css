@@ -94,10 +94,13 @@ summary span { margin-left: 4px; color: var(--muted); font-weight: 450; }
 .resume-fields button { flex: none; }
 .composer { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 19px; box-shadow: 0 8px 22px #254e8010; overflow: hidden; }
 .composer-heading { padding: 8px 15px; display: flex; align-items: center; gap: 10px; }
-.composer-heading h2, #toggle-composer { flex: none; }
-#toggle-composer { margin-left: auto; min-height: 34px; font-size: 13px; }
+.composer-heading h2, .composer-controls { flex: none; }
+.composer-controls, .composer-size { display: flex; align-items: center; gap: 5px; }
+.composer-controls { margin-left: auto; }
+.composer-size button { width: 34px; min-height: 34px; padding: 0; color: var(--accent-dark); font-size: 17px; line-height: 1; }
+#toggle-composer { min-height: 34px; font-size: 13px; }
 #collapsed-prompt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 13px; }
-#composer-panel { max-height: min(50dvh, 510px); overflow: auto; }
+#composer-panel { max-height: min(62dvh, 640px); overflow: auto; }
 .task-menu { position: fixed; inset: auto; margin: 0; padding: 5px; min-width: 160px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); color: inherit; box-shadow: 0 8px 24px #254e8030; }
 .task-menu button { display: block; text-align: left; width: 100%; min-height: 36px; background: transparent; border-color: transparent; font-size: 13px; }
 .task-menu button:hover, .task-menu button:focus-visible { background: var(--inset); }
@@ -117,10 +120,11 @@ textarea, select, input { display: block; width: 100%; min-width: 0; padding: 9p
 textarea { resize: vertical; line-height: 1.55; }
 textarea::placeholder, input::placeholder { color: #657b94; }
 .prompt-box { padding: 12px 15px 2px; background: var(--inset); border-block: 1px solid var(--line); }
-#prompt { border: 0; border-radius: 0; padding: 2px 0; min-height: 94px; }
+#prompt { border: 0; border-radius: 0; padding: 2px 0; height: 112px; min-height: 64px; max-height: clamp(64px, 46dvh, 400px); }
 .prompt-actions { display: flex; justify-content: flex-end; padding: 4px 0 7px; color: var(--muted); font-size: 12px; }
 .composer-footer { padding: 12px 15px 8px; }
-.reference-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.composer-references { padding: 2px 15px 5px; }
+.reference-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 #add-reference { display: inline-flex; align-items: center; gap: 4px; border-style: dashed; min-height: 44px; color: var(--accent-dark); font-size: 13px; font-weight: 700; }
 #add-reference span { font-size: 19px; line-height: 1; }
 .reference-hints { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
@@ -209,7 +213,7 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
   .toolbar > div { min-width: 0; }
   .toolbar .model-field, #generate { grid-column: 1 / -1; }
   #generate { width: 100%; }
-  .composer-heading, .composer-footer { padding-inline: 11px; }
+  .composer-heading, .composer-footer, .composer-references { padding-inline: 11px; }
   .prompt-box { padding-inline: 11px; }
 }
 @media (max-width: 480px) {

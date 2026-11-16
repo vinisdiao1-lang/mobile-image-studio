@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=13">
+  <link rel="stylesheet" href="./styles.css?v=14">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -61,42 +61,50 @@
       <div class="composer-heading">
         <h2 id="composer-title">图片生成</h2>
         <p id="collapsed-prompt" hidden></p>
-        <button id="toggle-composer" type="button" aria-expanded="true" aria-controls="composer-panel">收起输入栏 ⌄</button>
+        <div class="composer-controls">
+          <div id="composer-size" class="composer-size" role="group" aria-label="输入栏高度">
+            <button id="composer-smaller" type="button" aria-label="缩小输入栏" title="缩小输入栏" aria-controls="prompt">−</button>
+            <button id="composer-larger" type="button" aria-label="放大输入栏" title="放大输入栏" aria-controls="prompt">＋</button>
+          </div>
+          <button id="toggle-composer" type="button" aria-expanded="true" aria-controls="composer-panel">收起输入栏 ⌄</button>
+        </div>
       </div>
       <div id="composer-panel">
-      <div class="prompt-box">
-        <label for="prompt">提示词</label>
-        <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
-        <div class="prompt-actions"><output id="count" for="prompt">0 / 8000</output></div>
-      </div>
-      <div class="composer-footer">
-        <div class="reference-picker" id="reference-picker">
-          <input id="reference-files" type="file" accept="image/*" multiple hidden>
-          <button id="add-reference" type="button" aria-label="添加参考图"><span aria-hidden="true">＋</span> 参考图</button>
-          <div class="reference-hints">
-            <output id="reference-count" for="reference-files references">0 / 6</output>
-          <span class="drop-hint">拖入或粘贴图片</span>
+        <div class="composer-references">
+          <div class="reference-picker" id="reference-picker">
+            <input id="reference-files" type="file" accept="image/*" multiple hidden>
+            <button id="add-reference" type="button" aria-label="添加参考图"><span aria-hidden="true">＋</span> 参考图</button>
+            <div class="reference-hints">
+              <output id="reference-count" for="reference-files references">0 / 6</output>
+              <span class="drop-hint">拖入或粘贴图片</span>
+            </div>
+            <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
           </div>
-          <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
+          <details class="references">
+            <summary>参考图链接 <span>可选</span></summary>
+            <label for="references">每行一个公网 HTTP(S) 图片链接，文件和链接合计最多 6 张</label>
+            <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
+          </details>
+          <p class="notice" id="reference-note" role="status"></p>
         </div>
-        <p class="notice" id="reference-note" role="status"></p>
-        <div class="toolbar">
-          <div class="model-field">
-            <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
-            <select id="model"></select>
+        <div class="prompt-box">
+          <label for="prompt">提示词</label>
+          <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
+          <div class="prompt-actions"><output id="count" for="prompt">0 / 8000</output></div>
+        </div>
+        <div class="composer-footer">
+          <div class="toolbar">
+            <div class="model-field">
+              <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
+              <select id="model"></select>
+            </div>
+            <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
+            <div><label for="size">分辨率</label><select id="size"></select></div>
+            <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
+            <button class="primary" id="generate" type="submit"><span aria-hidden="true">↑</span> 生成图片</button>
           </div>
-          <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
-          <div><label for="size">分辨率</label><select id="size"></select></div>
-          <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
-          <button class="primary" id="generate" type="submit"><span aria-hidden="true">↑</span> 生成图片</button>
+          <p class="notice" id="form-note" role="status"></p>
         </div>
-        <details class="references">
-          <summary>参考图链接 <span>可选</span></summary>
-          <label for="references">每行一个公网 HTTP(S) 图片链接，文件和链接合计最多 6 张</label>
-          <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
-        </details>
-        <p class="notice" id="form-note" role="status"></p>
-      </div>
       </div>
     </form>
   </main>
@@ -173,6 +181,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=13"></script>
+  <script type="module" src="./app.js?v=14"></script>
 </body>
 </html>
