@@ -19,6 +19,7 @@ let nextHistory;
 let historyLoading = false;
 const emptyGallery = document.querySelector('[data-placeholder]');
 const imageLoaders = new WeakMap();
+const imageTargets = new WeakMap();
 const imageObserver = new IntersectionObserver((entries) => {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
@@ -302,6 +303,52 @@ async function downloadResult({ task, image, index }) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+}
+
+async function readResultImage(url, currentKey) {
+  const archived = url.startsWith('history-image/');
+  const response = await fetch(archived ? apiBase + url : url, {
+    ...(archived && { headers: { Authorization: 'Bearer ' + currentKey } }),
+    referrerPolicy: 'no-referrer',
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error('Image unavailable');
+  return response.blob();
+}
+
+async function clipboardPng(target) {
+  const source = target.image.getAttribute('src');
+  const blob = await readResultImage(source?.startsWith('blob:') ? source : target.url, key);
+  if (blob.type === 'image/png') return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  try {
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob((png) => png ? resolve(png) : reject(new Error('PNG conversion failed')), 'image/png');
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function copyResultImage(target) {
+  if (target.task.removed || !key) return;
+  const note = taskDetails.open ? $('details-status') : $('history-note');
+  note.hidden = false;
+  note.textContent = '正在复制图片…';
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem !== 'function') throw new Error('Clipboard unavailable');
+    // Call write during the user gesture, even if reading the image takes longer.
+    const png = clipboardPng(target);
+    png.catch(() => {});
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    note.textContent = '图片已复制。';
+  } catch {
+    note.textContent = '图片复制失败，请稍后重试或下载原图。';
+  }
 }
 
 function referenceLinks() {
@@ -647,12 +694,14 @@ function imageCardParts(task, url, index, currentKey) {
   }
   const preview = document.createElement('div');
   preview.className = 'image-preview';
+  const target = { task, url, image };
+  imageTargets.set(preview, target);
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'more-actions';
   more.textContent = '⋯';
   more.setAttribute('aria-label', '图片操作');
-  const openMenu = (x, y) => openTaskMenu({ task, url }, x, y);
+  const openMenu = (x, y) => openTaskMenu(target, x, y);
   more.addEventListener('click', () => {
     const rect = more.getBoundingClientRect();
     openMenu(rect.left, rect.bottom);
@@ -682,10 +731,12 @@ function openTaskMenu(target, x, y) {
   taskMenu.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
 }
 
-async function useTaskAction(action, { task, url }) {
+async function useTaskAction(action, target) {
+  const { task, url } = target;
   const currentKey = key;
   if (task.removed || !currentKey) return;
   $('history-note').textContent = '';
+  if (action === 'copy-image') return copyResultImage(target);
   if (action === 'repeat') {
     if (task.repeating) return;
     task.repeating = true;
@@ -721,14 +772,7 @@ async function useTaskAction(action, { task, url }) {
       $('reference-note').textContent = '参考图最多 6 张，含图片链接。';
       return;
     }
-    const archived = url.startsWith('history-image/');
-    const response = await fetch(archived ? apiBase + url : url, {
-      ...(archived && { headers: { Authorization: 'Bearer ' + currentKey } }),
-      referrerPolicy: 'no-referrer',
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!response.ok) throw new Error('Image unavailable');
-    const blob = await response.blob();
+    const blob = await readResultImage(url, currentKey);
     if (currentKey === key && !task.removed) await addReferenceFiles([new File([blob], '任务图片', { type: blob.type })]);
   } catch {
     $('reference-note').textContent = '图片暂时无法读取，请等原图留存后再试。';
@@ -874,6 +918,28 @@ taskMenu.addEventListener('click', (event) => {
   const target = menuTarget;
   taskMenu.hidePopover();
   void useTaskAction(action, target);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented || event.isComposing || event.repeat || event.altKey || event.shiftKey ||
+      !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'c') return;
+  if (window.getSelection()?.isCollapsed === false) return;
+  const editor = event.target;
+  if (editor.isContentEditable || (editor.matches?.('input, textarea') &&
+      editor.selectionStart !== editor.selectionEnd)) return;
+
+  let preview;
+  if (taskDetails.open) {
+    if (!$('preview-image').matches(':hover')) return;
+    preview = activeDetails?.image.closest('.image-preview');
+  } else {
+    if (document.querySelector('dialog[open]')) return;
+    preview = gallery.querySelector('.image-preview:hover') ||
+      editor.closest?.('#gallery .image-preview');
+  }
+  const target = imageTargets.get(preview);
+  if (!target) return;
+  event.preventDefault();
+  void copyResultImage(target);
 });
 $('more-tasks').addEventListener('click', () => { if (key) loadHistory(key, true); });
 $('manage-tasks').addEventListener('click', () => {
