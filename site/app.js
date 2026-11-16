@@ -37,6 +37,8 @@ let preparingReferences = false;
 let draggedReference;
 let menuTarget;
 const taskMenu = $('task-menu');
+const taskDetails = $('task-details');
+let activeDetails;
 
 function options(select, items, preferred) {
   const previous = select.value;
@@ -244,6 +246,54 @@ function showPreview(url, alt) {
   $('image-dialog').showModal();
 }
 
+function updateDetails() {
+  const { task, image } = activeDetails;
+  const [model, ratio] = task.settings.split(' · ');
+  $('details-model').textContent = model || '未记录';
+  $('details-ratio').textContent = ratio || '未记录';
+  $('details-prompt').textContent = task.prompt || '此任务没有保存提示词。';
+  const status = $('details-status');
+  status.textContent = task.status.textContent;
+  status.hidden = !status.textContent;
+  const source = image.getAttribute('src');
+  const original = $('details-original');
+  if (source) original.href = source;
+  else original.removeAttribute('href');
+  original.hidden = !source;
+  $('details-preview').disabled = !source;
+  $('details-download').disabled = !source;
+}
+
+function showTaskDetails(task, image, index) {
+  activeDetails = { task, image, index };
+  $('details-download').textContent = '下载';
+  updateDetails();
+  if (!taskDetails.open) taskDetails.showModal();
+}
+
+async function downloadResult({ task, image, index }) {
+  const button = $('details-download');
+  button.disabled = true;
+  try {
+    const response = await fetch(image.src, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error('下载失败');
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
+    link.href = objectUrl;
+    link.download = '密码象-' + (task.id || task.number || task.record) + '-' + (index + 1) + '.' + extension;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+  } catch {
+    if (activeDetails?.task === task) button.textContent = '请打开原图保存';
+  } finally {
+    if (activeDetails?.task === task) updateDetails();
+  }
+}
+
 function referenceLinks() {
   return $('references').value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
@@ -397,9 +447,9 @@ function addTask(title, settings, record = crypto.randomUUID(), append = false) 
     taskId: node.querySelector('.task-id'),
     retry: node.querySelector('.poll-again'),
     placeholder: node.querySelector('.task-placeholder'),
-    actions: node.querySelector('.image-actions'),
     selection: node.querySelector('input[type=checkbox]'),
     record,
+    settings: settings || '',
     cards: [node],
     blobs: new Set(),
     running: false,
@@ -423,6 +473,7 @@ function addTask(title, settings, record = crypto.randomUUID(), append = false) 
 
 function removeTaskCards(task) {
   task.removed = true;
+  if (activeDetails?.task === task) taskDetails.close();
   for (const card of task.cards) {
     for (const image of card.querySelectorAll('img')) imageObserver.unobserve(image);
     card.remove();
@@ -476,6 +527,7 @@ function setStatus(task, badge, message = '', retry = false) {
   task.taskId.textContent = task.id ? '任务 ID  ' + task.id : '';
   task.taskId.hidden = !task.id;
   task.retry.hidden = !retry;
+  if (activeDetails?.task === task) updateDetails();
 }
 
 function setRunning(task, running) {
@@ -506,7 +558,7 @@ function imageCardParts(task, url, index, currentKey) {
   const thumbnail = document.createElement('button');
   thumbnail.type = 'button';
   thumbnail.className = 'thumbnail';
-  thumbnail.setAttribute('aria-label', '预览生成结果 ' + (index + 1));
+  thumbnail.setAttribute('aria-label', '查看生成详情 ' + (index + 1));
   const image = new Image();
   image.alt = '生成结果 ' + (index + 1);
   image.loading = 'lazy';
@@ -518,19 +570,8 @@ function imageCardParts(task, url, index, currentKey) {
   zoom.setAttribute('aria-hidden', 'true');
   zoom.textContent = '↗';
   thumbnail.append(image, zoom);
-  thumbnail.addEventListener('click', () => {
-    if (image.getAttribute('src')) showPreview(image.src, image.alt);
-  });
-  const original = document.createElement('a');
-  original.textContent = '打开原图 ↗';
-  if (!archived) original.href = url;
-  original.target = '_blank';
-  original.rel = 'noopener noreferrer';
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.textContent = '下载';
+  thumbnail.addEventListener('click', () => showTaskDetails(task, image, index));
   if (archived) {
-    save.disabled = true;
     imageLoaders.set(image, () => fetch(apiBase + url, {
       headers: { Authorization: 'Bearer ' + currentKey },
       signal: AbortSignal.timeout(18000),
@@ -542,34 +583,15 @@ function imageCardParts(task, url, index, currentKey) {
       const objectUrl = URL.createObjectURL(blob);
       task.blobs.add(objectUrl);
       image.src = objectUrl;
-      original.href = objectUrl;
-      save.disabled = false;
+      if (activeDetails?.image === image) updateDetails();
     }).catch(() => {
-      save.textContent = '图片读取失败';
+      if (activeDetails?.image === image) {
+        $('details-status').textContent = '图片读取失败。';
+        $('details-status').hidden = false;
+      }
     }));
     imageObserver.observe(image);
   }
-  save.addEventListener('click', async () => {
-    save.disabled = true;
-    try {
-      const response = await fetch(image.src, { referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error('下载失败');
-      const blob = await response.blob();
-      const download = document.createElement('a');
-      const objectUrl = URL.createObjectURL(blob);
-      const extension = ({ 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' })[blob.type] || 'png';
-      download.href = objectUrl;
-      download.download = '密码象-' + (task.id || task.number) + '-' + (index + 1) + '.' + extension;
-      document.body.append(download);
-      download.click();
-      download.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
-    } catch {
-      save.textContent = '请打开原图长按保存';
-    } finally {
-      save.disabled = false;
-    }
-  });
   const preview = document.createElement('div');
   preview.className = 'image-preview';
   const more = document.createElement('button');
@@ -583,7 +605,7 @@ function imageCardParts(task, url, index, currentKey) {
     openMenu(rect.left, rect.bottom);
   });
   preview.append(thumbnail, more);
-  return { preview, original, save, openMenu };
+  return { preview, image, openMenu };
 }
 
 function openTaskMenu(target, x, y) {
@@ -663,29 +685,23 @@ function showImages(task, urls, currentKey, saving = false) {
   task.completed = true;
   let previous = task.node;
   urls.forEach((url, index) => {
-    const { preview, original, save, openMenu } = imageCardParts(task, url, index, currentKey);
+    const { preview, image, openMenu } = imageCardParts(task, url, index, currentKey);
     const card = index === 0 ? task.node : document.createElement('article');
     card.oncontextmenu = (event) => {
       event.preventDefault();
       openMenu(event.clientX, event.clientY);
     };
+    if (activeDetails?.task === task && activeDetails.index === index) {
+      activeDetails.image = image;
+      updateDetails();
+    }
     if (index === 0) {
       task.placeholder.replaceWith(preview);
-      task.actions.append(original, save);
-      task.actions.hidden = false;
+      task.node.querySelector('.task-content').hidden = true;
       return;
     }
     card.className = 'task';
-    const content = document.createElement('div');
-    content.className = 'task-content';
-    const heading = document.createElement('h3');
-    heading.textContent = task.node.querySelector('h3').textContent;
-    heading.title = heading.textContent;
-    const actions = document.createElement('div');
-    actions.className = 'image-actions';
-    actions.append(original, save);
-    content.append(heading, actions);
-    card.append(preview, content);
+    card.append(preview);
     previous.after(card);
     task.cards.push(card);
     previous = card;
@@ -709,7 +725,6 @@ async function checkArchive(task, currentKey) {
         imageObserver.unobserve(preview.querySelector('img'));
         preview.replaceWith(task.placeholder);
         task.cards.length = 1;
-        task.actions.replaceChildren();
         task.completed = false;
         for (const url of task.blobs) URL.revokeObjectURL(url);
         task.blobs.clear();
@@ -839,6 +854,20 @@ $('delete-dialog').addEventListener('close', async () => {
 });
 $('close-preview').addEventListener('click', () => $('image-dialog').close());
 $('image-dialog').addEventListener('close', () => $('preview-image').removeAttribute('src'));
+$('close-details').addEventListener('click', () => taskDetails.close());
+taskDetails.addEventListener('click', (event) => {
+  if (event.target === taskDetails && event.clientX < taskDetails.getBoundingClientRect().left) taskDetails.close();
+});
+taskDetails.addEventListener('close', () => {
+  if (!taskDetails.open) activeDetails = undefined;
+});
+$('details-preview').addEventListener('click', () => {
+  const image = activeDetails?.image;
+  if (image?.getAttribute('src')) showPreview(image.src, image.alt);
+});
+$('details-download').addEventListener('click', () => {
+  if (activeDetails) void downloadResult(activeDetails);
+});
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);

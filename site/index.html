@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=10">
+  <link rel="stylesheet" href="./styles.css?v=11">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -114,7 +114,6 @@
         <p class="task-status" role="status"></p>
         <p class="task-id" hidden></p>
         <button class="poll-again" type="button" hidden>继续查询</button>
-        <div class="image-actions" hidden></div>
       </div>
     </article>
   </template>
@@ -131,6 +130,27 @@
       <div class="dialog-actions"><button value="cancel">取消</button><button class="danger" value="delete">确认删除</button></div>
     </form>
   </dialog>
+  <dialog id="task-details" aria-labelledby="details-title">
+    <header class="details-header">
+      <h2 id="details-title">生图流程</h2>
+      <button id="close-details" type="button" aria-label="关闭任务详情">×</button>
+    </header>
+    <div class="details-body">
+      <dl class="details-meta">
+        <div><dt>类型</dt><dd>图片生成</dd></div>
+        <div><dt>模型</dt><dd id="details-model"></dd></div>
+        <div><dt>比例</dt><dd id="details-ratio"></dd></div>
+      </dl>
+      <h3>提示词</h3>
+      <p id="details-prompt"></p>
+      <p id="details-status" class="details-status" role="status" hidden></p>
+    </div>
+    <footer class="details-actions">
+      <button id="details-preview" type="button">查看大图</button>
+      <a id="details-original" target="_blank" rel="noopener noreferrer" hidden>打开原图 ↗</a>
+      <button id="details-download" type="button">下载</button>
+    </footer>
+  </dialog>
   <dialog id="image-dialog" aria-labelledby="preview-title">
     <div class="panel-heading"><h2 id="preview-title">图片预览</h2><button id="close-preview" type="button" aria-label="关闭预览">×</button></div>
     <img id="preview-image" alt="" referrerpolicy="no-referrer">
@@ -145,6 +165,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=10"></script>
+  <script type="module" src="./app.js?v=11"></script>
 </body>
 </html>
