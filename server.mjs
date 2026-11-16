@@ -37,6 +37,8 @@ const assets = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/models.js', ['models.js', 'text/javascript; charset=utf-8']],
   ['/icon.svg', ['icon.svg', 'image/svg+xml']],
+  ['/password-elephant.jpg', ['password-elephant.jpg', 'image/jpeg']],
+  ['/glass-workspace.webp', ['glass-workspace.webp', 'image/webp']],
 ]);
 
 function send(response, status, payload) {

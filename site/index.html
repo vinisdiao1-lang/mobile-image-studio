@@ -3,109 +3,114 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#edf3fa">
+  <meta name="theme-color" content="#d8eaf1">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
-  <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=18">
+  <link rel="icon" href="./password-elephant.jpg" type="image/jpeg">
+  <link rel="stylesheet" href="./styles.css?v=19">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
-  <header class="top">
-    <div class="top-inner">
-      <a class="brand" href="./"><img src="./icon.svg?v=4" alt="" width="34" height="34">密码象</a>
-      <div class="top-actions">
-        <button id="balance-refresh" type="button" class="balance-button" title="刷新积分余额">
-          <span>剩余积分</span> <strong id="balance-value" role="status">—</strong>
-        </button>
-        <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
-      </div>
-    </div>
-  </header>
-  <nav class="view-switch" aria-label="工作台">
-    <button id="show-studio" type="button" aria-controls="studio-view" aria-pressed="true">生图</button>
-    <button id="show-dashboard" type="button" aria-controls="dashboard-view" aria-pressed="false">任务看板</button>
-  </nav>
-  <main class="workspace" id="studio-view">
-    <section class="result" aria-labelledby="result-title">
-      <div class="gallery-heading">
-        <div class="section-title"><h1 id="result-title">创作记录</h1><span id="result-badge" role="status">暂无任务</span></div>
-        <div class="gallery-zoom" role="group" aria-label="预览大小">
-          <button id="zoom-out" type="button" aria-label="缩小预览">−</button>
-          <input id="preview-size" type="range" min="50" max="150" step="10" value="100" aria-label="预览图大小">
-          <button id="zoom-in" type="button" aria-label="放大预览">＋</button>
-          <output id="preview-percent" for="preview-size">100%</output>
+  <div class="app-window">
+    <header class="top">
+      <div class="top-inner">
+        <a class="brand" href="./">
+          <span class="brand-mark"><img src="./password-elephant.jpg" alt="" width="44" height="44"></span>
+          <span>密码象</span>
+        </a>
+        <nav class="view-switch" aria-label="工作台">
+          <button id="show-studio" type="button" aria-controls="studio-view" aria-pressed="true">生图</button>
+          <button id="show-dashboard" type="button" aria-controls="dashboard-view" aria-pressed="false">任务看板</button>
+        </nav>
+        <div class="top-actions">
+          <button id="balance-refresh" type="button" class="balance-button" title="刷新积分余额">
+            <span>剩余积分</span> <strong id="balance-value" role="status">—</strong>
+          </button>
+          <button id="open-key" type="button" class="key-button"><span class="key-dot"></span><span id="key-label">设置 API Key</span></button>
         </div>
       </div>
-      <div class="history-controls">
-        <button id="manage-tasks" type="button" hidden>管理任务</button>
-        <button id="delete-tasks" type="button" hidden disabled>删除所选</button>
-        <button id="more-tasks" type="button" hidden>加载更早记录</button>
-        <p id="history-note" class="notice" role="status"></p>
-      </div>
-      <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可上下滚动">
-        <div class="empty-card" data-placeholder>
-          <span class="empty-icon" aria-hidden="true">✦</span>
-          <p>生成的图片会显示在这里</p>
+    </header>
+    <main class="workspace" id="studio-view">
+      <section class="result" aria-labelledby="result-title">
+        <div class="gallery-heading">
+          <div class="section-title"><h1 id="result-title">创作记录</h1><span id="result-badge" role="status">暂无任务</span></div>
+          <div class="gallery-zoom" role="group" aria-label="预览大小">
+            <button id="zoom-out" type="button" aria-label="缩小预览">−</button>
+            <input id="preview-size" type="range" min="50" max="150" step="10" value="100" aria-label="预览图大小">
+            <button id="zoom-in" type="button" aria-label="放大预览">＋</button>
+            <output id="preview-percent" for="preview-size">100%</output>
+          </div>
         </div>
-      </div>
-    </section>
-    <form id="create" class="composer" aria-labelledby="composer-title">
-      <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
-      <div class="composer-shell">
-        <div class="composer-heading">
-          <h2 id="composer-title">图片生成</h2>
-          <p id="collapsed-prompt" hidden></p>
-          <div class="composer-controls">
-            <div id="composer-size" class="composer-size" role="group" aria-label="输入栏高度">
-              <button id="composer-smaller" type="button" aria-label="缩小输入栏" title="缩小输入栏" aria-controls="prompt">−</button>
-              <button id="composer-larger" type="button" aria-label="放大输入栏" title="放大输入栏" aria-controls="prompt">＋</button>
+        <div class="history-controls">
+          <button id="manage-tasks" type="button" hidden>管理任务</button>
+          <button id="delete-tasks" type="button" hidden disabled>删除所选</button>
+          <button id="more-tasks" type="button" hidden>加载更早记录</button>
+          <p id="history-note" class="notice" role="status"></p>
+        </div>
+        <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可上下滚动">
+          <div class="empty-card" data-placeholder>
+            <span class="empty-icon" aria-hidden="true">✦</span>
+            <div><h2>暂无作品</h2><p>输入提示词，生成第一张图</p></div>
+          </div>
+        </div>
+      </section>
+      <form id="create" class="composer" aria-labelledby="composer-title">
+        <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
+        <div class="composer-shell">
+          <div class="composer-heading">
+            <h2 id="composer-title">图片生成</h2>
+            <p id="collapsed-prompt" hidden></p>
+            <div class="composer-controls">
+              <div id="composer-size" class="composer-size" role="group" aria-label="输入栏高度">
+                <button id="composer-smaller" type="button" aria-label="缩小输入栏" title="缩小输入栏" aria-controls="prompt">−</button>
+                <button id="composer-larger" type="button" aria-label="放大输入栏" title="放大输入栏" aria-controls="prompt">＋</button>
+              </div>
+              <button id="toggle-composer" type="button" aria-expanded="true" aria-controls="composer-panel">收起输入栏 ⌄</button>
             </div>
-            <button id="toggle-composer" type="button" aria-expanded="true" aria-controls="composer-panel">收起输入栏 ⌄</button>
           </div>
-        </div>
-        <div id="composer-panel">
-          <div class="prompt-box">
-            <label for="prompt">提示词</label>
-            <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
-            <div class="prompt-actions"><output id="count" for="prompt">0 / 8000</output></div>
-          </div>
-          <div class="composer-footer">
-            <div class="toolbar">
-              <div class="model-tools">
-                <div class="reference-picker" id="reference-picker">
-                  <input id="reference-files" type="file" accept="image/*" multiple hidden>
-                  <button id="add-reference" type="button" aria-label="添加参考图"><span aria-hidden="true">＋</span> 参考图</button>
-                  <div class="reference-hints">
-                    <output id="reference-count" for="reference-files references">0 / 6</output>
-                    <span class="drop-hint">拖入或粘贴图片</span>
+          <div id="composer-panel">
+            <div class="prompt-box">
+              <label for="prompt">提示词</label>
+              <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
+              <div class="prompt-actions"><output id="count" for="prompt">0 / 8000</output></div>
+            </div>
+            <div class="composer-footer">
+              <div class="toolbar">
+                <div class="model-tools">
+                  <div class="reference-picker" id="reference-picker">
+                    <input id="reference-files" type="file" accept="image/*" multiple hidden>
+                    <button id="add-reference" type="button" aria-label="添加参考图"><span aria-hidden="true">＋</span> 参考图</button>
+                    <div class="reference-hints">
+                      <output id="reference-count" for="reference-files references">0 / 6</output>
+                      <span class="drop-hint">拖入或粘贴图片</span>
+                    </div>
+                  </div>
+                  <div class="model-field">
+                    <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
+                    <select id="model"></select>
                   </div>
                 </div>
-                <div class="model-field">
-                  <div class="model-heading"><label for="model">模型</label><output id="model-credits" for="model quality"></output></div>
-                  <select id="model"></select>
-                </div>
+                <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
+                <div><label for="size">分辨率</label><select id="size"></select></div>
+                <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
+                <button class="primary" id="generate" type="submit"><span aria-hidden="true">↑</span> 生成图片</button>
               </div>
-              <div><label for="ratio">画面比例</label><select id="ratio"></select></div>
-              <div><label for="size">分辨率</label><select id="size"></select></div>
-              <div id="quality-row"><label for="quality">质量</label><select id="quality"></select></div>
-              <button class="primary" id="generate" type="submit"><span aria-hidden="true">↑</span> 生成图片</button>
+              <details class="references">
+                <summary>参考图链接 <span>可选</span></summary>
+                <label for="references">每行一个公网 HTTP(S) 图片链接，文件和链接合计最多 6 张</label>
+                <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
+              </details>
+              <p class="notice" id="reference-note" role="status"></p>
+              <p class="notice" id="form-note" role="status"></p>
             </div>
-            <details class="references">
-              <summary>参考图链接 <span>可选</span></summary>
-              <label for="references">每行一个公网 HTTP(S) 图片链接，文件和链接合计最多 6 张</label>
-              <textarea id="references" rows="2" maxlength="15000" spellcheck="false" autocapitalize="off" placeholder="https://example.com/reference.jpg"></textarea>
-            </details>
-            <p class="notice" id="reference-note" role="status"></p>
-            <p class="notice" id="form-note" role="status"></p>
           </div>
         </div>
-      </div>
-    </form>
-  </main>
-  <main id="dashboard-view" class="dashboard-view" hidden>
-    <p id="dashboard-status" class="dashboard-status" role="status"></p>
-    <div id="dashboard-frame-host"></div>
-  </main>
+      </form>
+    </main>
+    <main id="dashboard-view" class="dashboard-view" hidden>
+      <p id="dashboard-status" class="dashboard-status" role="status"></p>
+      <div id="dashboard-frame-host"></div>
+    </main>
+  </div>
   <template id="task-template">
     <article class="task">
       <label class="task-select" hidden><input type="checkbox" aria-label="选择任务"></label>
