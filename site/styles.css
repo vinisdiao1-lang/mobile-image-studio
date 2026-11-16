@@ -206,7 +206,7 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
   .details-panel { border-left: 0; }
   .view-switch, .dashboard-view { padding-inline: 12px; }
   .top-inner { min-height: 56px; padding-inline: 13px; }
-  .workspace { padding: 10px 12px; gap: 8px; }
+  .workspace { padding: 10px 12px; gap: 8px; grid-template-rows: minmax(230px, 1fr) auto; }
   .gallery { --gap: 8px; --card-size: calc(136px * var(--preview-scale, 1)); }
   .gallery-heading { margin-bottom: 7px; }
   .toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
