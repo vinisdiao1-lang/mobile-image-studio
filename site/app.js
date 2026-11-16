@@ -30,11 +30,13 @@ const qualityLabels = { low: '低', medium: '中', high: '高', xhigh: '超高',
 const successStatuses = ['succeeded', 'completed', 'success'];
 const failureStatuses = ['failed', 'not_found', 'uncertain', 'canceled', 'cancelled'];
 const gallery = $('gallery');
-const slider = $('gallery-slider');
 const composer = $('create');
 const fileInput = $('reference-files');
 const referenceFiles = [];
 let preparingReferences = false;
+let draggedReference;
+let menuTarget;
+const taskMenu = $('task-menu');
 
 function options(select, items, preferred) {
   const previous = select.value;
@@ -68,6 +70,7 @@ function setKey(value, persist = true) {
     }
   }
   if (value !== key) {
+    taskMenu.hidePopover();
     balanceRequest?.abort();
     balanceRequest = undefined;
     lastBalance = undefined;
@@ -201,6 +204,14 @@ function withKey(callback) {
 
 function syncPrompt() {
   $('count').textContent = $('prompt').value.length + ' / 8000';
+  $('collapsed-prompt').textContent = $('prompt').value.trim() || '输入提示词';
+}
+
+function toggleComposer(expanded) {
+  $('composer-panel').hidden = !expanded;
+  $('collapsed-prompt').hidden = expanded;
+  $('toggle-composer').setAttribute('aria-expanded', String(expanded));
+  $('toggle-composer').textContent = expanded ? '收起输入栏 ⌄' : '展开输入栏 ⌃';
 }
 
 function updateTaskCount() {
@@ -217,31 +228,13 @@ function updateTaskCount() {
   for (const task of tasks) task.selection.parentElement.hidden = !managingTasks || task.running;
 }
 
-function galleryStep() {
-  const [first, second] = gallery.querySelectorAll(':scope > :not([hidden])');
-  return second ? second.getBoundingClientRect().left - first.getBoundingClientRect().left : 1;
-}
-
-function syncGallery() {
-  const count = gallery.querySelectorAll(':scope > :not([hidden])').length;
-  const max = Math.max(0, count - 2);
-  const index = Math.min(max, Math.max(0, Math.round(gallery.scrollLeft / galleryStep())));
-  slider.max = String(max || 1);
-  slider.value = String(index);
-  slider.disabled = max === 0;
-  $('gallery-controls').hidden = max === 0;
-  $('gallery-prev').disabled = index === 0;
-  $('gallery-next').disabled = index === max;
-  const position = (index + 1) + '–' + Math.min(count, index + 2) + ' / ' + count;
-  $('gallery-position').hidden = max === 0;
-  $('gallery-position').textContent = position;
-  slider.setAttribute('aria-valuetext', position);
-}
-
-function moveGallery(index, behavior = 'instant') {
-  const max = Math.max(0, gallery.querySelectorAll(':scope > :not([hidden])').length - 2);
-  gallery.scrollTo({ left: Math.min(max, Math.max(0, index)) * galleryStep(), behavior });
-  syncGallery();
+function setPreviewSize(value) {
+  const percent = Math.max(50, Math.min(150, value));
+  gallery.style.setProperty('--preview-scale', String(percent / 100));
+  $('preview-size').value = String(percent);
+  $('preview-percent').textContent = percent + '%';
+  $('zoom-out').disabled = percent === 50;
+  $('zoom-in').disabled = percent === 150;
 }
 
 function showPreview(url, alt) {
@@ -294,15 +287,60 @@ async function prepareImage(file) {
 function addReferenceThumbnail(file, data) {
   const item = document.createElement('li');
   item.className = 'reference-item';
+  item.draggable = true;
+  item.tabIndex = 0;
+  item.setAttribute('aria-label', file.name + '，可拖动或用左右方向键排序');
   const image = new Image();
   image.src = data;
   image.alt = file.name;
+  image.draggable = false;
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'remove-reference';
   remove.textContent = '×';
   remove.setAttribute('aria-label', '移除参考图 ' + file.name);
-  const reference = { data };
+  const reference = { data, item };
+  item.addEventListener('dragstart', (event) => {
+    draggedReference = reference;
+    event.dataTransfer.setData('text/plain', '');
+    event.dataTransfer.effectAllowed = 'move';
+  });
+  item.addEventListener('dragover', (event) => {
+    if (!draggedReference || draggedReference === reference) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    item.setAttribute('data-drop', '');
+  });
+  item.addEventListener('dragleave', () => item.removeAttribute('data-drop'));
+  item.addEventListener('dragend', () => {
+    draggedReference = undefined;
+    for (const ref of referenceFiles) ref.item.removeAttribute('data-drop');
+  });
+  item.addEventListener('drop', (event) => {
+    if (!draggedReference) return;
+    event.preventDefault();
+    moveReference(draggedReference, referenceFiles.indexOf(reference));
+    item.removeAttribute('data-drop');
+    draggedReference = undefined;
+  });
+  item.addEventListener('keydown', (event) => {
+    if (event.target !== item || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const index = referenceFiles.indexOf(reference);
+    moveReference(reference, index + (event.key === 'ArrowRight' ? 1 : -1));
+    item.focus();
+  });
+  image.addEventListener('pointerdown', (event) => {
+    if (event.pointerType !== 'touch') return;
+    image.setPointerCapture(event.pointerId);
+    item.setAttribute('data-drop', '');
+  });
+  image.addEventListener('pointerup', (event) => {
+    if (event.pointerType !== 'touch') return;
+    const destination = document.elementFromPoint(event.clientX, event.clientY)?.closest('.reference-item');
+    moveReference(reference, referenceFiles.findIndex((ref) => ref.item === destination));
+  });
+  image.addEventListener('lostpointercapture', () => item.removeAttribute('data-drop'));
   remove.addEventListener('click', () => {
     referenceFiles.splice(referenceFiles.indexOf(reference), 1);
     item.remove();
@@ -312,6 +350,15 @@ function addReferenceThumbnail(file, data) {
   referenceFiles.push(reference);
   item.append(image, remove);
   $('reference-thumbnails').append(item);
+}
+
+function moveReference(reference, target) {
+  const from = referenceFiles.indexOf(reference);
+  if (target === from || target < 0 || target >= referenceFiles.length) return;
+  referenceFiles.splice(from, 1);
+  referenceFiles.splice(target, 0, reference);
+  const next = referenceFiles[target + 1]?.item ?? null;
+  $('reference-thumbnails').insertBefore(reference.item, next);
 }
 
 async function addReferenceFiles(files) {
@@ -370,7 +417,7 @@ function addTask(title, settings, record = crypto.randomUUID(), append = false) 
   if (append) gallery.append(node);
   else gallery.prepend(node);
   updateTaskCount();
-  if (!append) moveGallery(0);
+  if (!append) gallery.scrollTop = 0;
   return task;
 }
 
@@ -406,6 +453,8 @@ async function loadHistory(currentKey, more = false) {
       const task = addTask(row.prompt, row.settings, row.record, true);
       task.id = row.id;
       task.persisted = true;
+      task.repeatable = row.repeatable;
+      task.prompt = row.prompt === '查询已有任务' && !row.repeatable ? '' : row.prompt;
       if (row.images.length) showImages(task, row.images, currentKey, row.saving);
       else if (row.status === 'pending' && row.id) runPoll(task, currentKey);
       else setStatus(task, row.status === 'failed' ? '任务结束' : '提交未确认', row.error || '暂无任务回执。');
@@ -413,7 +462,6 @@ async function loadHistory(currentKey, more = false) {
     nextHistory = data.next;
     $('more-tasks').hidden = !nextHistory;
     $('history-note').textContent = '';
-    syncGallery();
   } catch {
     if (key === currentKey) $('history-note').textContent = '暂时无法加载历史记录，刷新页面可重试。';
   } finally {
@@ -522,7 +570,91 @@ function imageCardParts(task, url, index, currentKey) {
       save.disabled = false;
     }
   });
-  return { thumbnail, original, save };
+  const preview = document.createElement('div');
+  preview.className = 'image-preview';
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'more-actions';
+  more.textContent = '⋯';
+  more.setAttribute('aria-label', '图片操作');
+  const openMenu = (x, y) => openTaskMenu({ task, url }, x, y);
+  more.addEventListener('click', () => {
+    const rect = more.getBoundingClientRect();
+    openMenu(rect.left, rect.bottom);
+  });
+  preview.append(thumbnail, more);
+  return { preview, original, save, openMenu };
+}
+
+function openTaskMenu(target, x, y) {
+  if (target.task.removed) return;
+  menuTarget = target;
+  const task = target.task;
+  const repeat = taskMenu.querySelector('[data-task-action=repeat]');
+  repeat.disabled = !task.repeatable || task.repeating;
+  repeat.title = task.repeatable ? '' : '此任务未保存原始生成参数';
+  for (const name of ['copy', 'push']) {
+    taskMenu.querySelector('[data-task-action=' + name + ']').disabled = !task.prompt;
+  }
+  taskMenu.style.left = '0px';
+  taskMenu.style.top = '0px';
+  if (!taskMenu.matches(':popover-open')) taskMenu.showPopover();
+  taskMenu.style.left = Math.max(4, Math.min(x, window.innerWidth - taskMenu.offsetWidth - 4)) + 'px';
+  taskMenu.style.top = Math.max(4, Math.min(y, window.innerHeight - taskMenu.offsetHeight - 4)) + 'px';
+  taskMenu.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
+}
+
+async function useTaskAction(action, { task, url }) {
+  const currentKey = key;
+  if (task.removed || !currentKey) return;
+  $('history-note').textContent = '';
+  if (action === 'repeat') {
+    if (task.repeating) return;
+    task.repeating = true;
+    try {
+      const input = await historyRequest('history-recipe?record=' + task.record, currentKey);
+      if (currentKey !== key || task.removed) return;
+      void submit(input, currentKey);
+    } catch {
+      $('history-note').textContent = '无法读取原始生成参数。';
+    } finally {
+      task.repeating = false;
+    }
+    return;
+  }
+  if (action === 'copy') {
+    try {
+      await navigator.clipboard.writeText(task.prompt);
+      $('history-note').textContent = '提示词已复制。';
+    } catch {
+      $('history-note').textContent = '无法访问剪贴板，可推送到输入框后手动复制。';
+    }
+    return;
+  }
+  toggleComposer(true);
+  if (action === 'push') {
+    $('prompt').value = task.prompt;
+    syncPrompt();
+    $('prompt').focus();
+    return;
+  }
+  try {
+    if (referenceFiles.length + referenceLinks().length >= maxReferences) {
+      $('reference-note').textContent = '参考图最多 6 张，含图片链接。';
+      return;
+    }
+    const archived = url.startsWith('history-image/');
+    const response = await fetch(archived ? apiBase + url : url, {
+      ...(archived && { headers: { Authorization: 'Bearer ' + currentKey } }),
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) throw new Error('Image unavailable');
+    const blob = await response.blob();
+    if (currentKey === key && !task.removed) await addReferenceFiles([new File([blob], '任务图片', { type: blob.type })]);
+  } catch {
+    $('reference-note').textContent = '图片暂时无法读取，请等原图留存后再试。';
+  }
 }
 
 function showImages(task, urls, currentKey, saving = false) {
@@ -531,14 +663,18 @@ function showImages(task, urls, currentKey, saving = false) {
   task.completed = true;
   let previous = task.node;
   urls.forEach((url, index) => {
-    const { thumbnail, original, save } = imageCardParts(task, url, index, currentKey);
+    const { preview, original, save, openMenu } = imageCardParts(task, url, index, currentKey);
+    const card = index === 0 ? task.node : document.createElement('article');
+    card.oncontextmenu = (event) => {
+      event.preventDefault();
+      openMenu(event.clientX, event.clientY);
+    };
     if (index === 0) {
-      task.placeholder.replaceWith(thumbnail);
+      task.placeholder.replaceWith(preview);
       task.actions.append(original, save);
       task.actions.hidden = false;
       return;
     }
-    const card = document.createElement('article');
     card.className = 'task';
     const content = document.createElement('div');
     content.className = 'task-content';
@@ -549,12 +685,11 @@ function showImages(task, urls, currentKey, saving = false) {
     actions.className = 'image-actions';
     actions.append(original, save);
     content.append(heading, actions);
-    card.append(thumbnail, content);
+    card.append(preview, content);
     previous.after(card);
     task.cards.push(card);
     previous = card;
   });
-  syncGallery();
   if (saving) void checkArchive(task, currentKey);
 }
 
@@ -570,9 +705,9 @@ async function checkArchive(task, currentKey) {
           for (const image of card.querySelectorAll('img')) imageObserver.unobserve(image);
           card.remove();
         }
-        const thumbnail = task.node.querySelector('.thumbnail');
-        imageObserver.unobserve(thumbnail.querySelector('img'));
-        thumbnail.replaceWith(task.placeholder);
+        const preview = task.node.querySelector('.image-preview');
+        imageObserver.unobserve(preview.querySelector('img'));
+        preview.replaceWith(task.placeholder);
         task.cards.length = 1;
         task.actions.replaceChildren();
         task.completed = false;
@@ -629,6 +764,8 @@ async function submit(input, currentKey) {
   const model = models.find((item) => item.id === input.model);
   const settings = [model.name, input.ratio, input.size, creditLabel(model, input.quality)].join(' · ');
   const task = addTask(input.prompt.trim(), settings);
+  task.prompt = input.prompt;
+  task.repeatable = true;
   task.number = tasks.length;
   setRunning(task, true);
   setStatus(task, '正在提交', '正在提交生图任务…');
@@ -651,12 +788,19 @@ async function submit(input, currentKey) {
 options($('model'), models.map((model) => [model.id, model.name + ' · ' + creditLabel(model)]), 'gemini-nano-banana-2.1');
 options($('ratio'), ratios, '1:1');
 syncModel();
-syncGallery();
-gallery.addEventListener('scroll', syncGallery, { passive: true });
-new ResizeObserver(syncGallery).observe(gallery);
-slider.addEventListener('input', () => moveGallery(Number(slider.value)));
-$('gallery-prev').addEventListener('click', () => moveGallery(Number(slider.value) - 2));
-$('gallery-next').addEventListener('click', () => moveGallery(Number(slider.value) + 2));
+syncPrompt();
+setPreviewSize(100);
+$('preview-size').addEventListener('input', (event) => setPreviewSize(Number(event.target.value)));
+$('zoom-out').addEventListener('click', () => setPreviewSize(Number($('preview-size').value) - 10));
+$('zoom-in').addEventListener('click', () => setPreviewSize(Number($('preview-size').value) + 10));
+$('toggle-composer').addEventListener('click', () => toggleComposer($('composer-panel').hidden));
+taskMenu.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-task-action]')?.dataset.taskAction;
+  if (!action || !menuTarget) return;
+  const target = menuTarget;
+  taskMenu.hidePopover();
+  void useTaskAction(action, target);
+});
 $('more-tasks').addEventListener('click', () => { if (key) loadHistory(key, true); });
 $('manage-tasks').addEventListener('click', () => {
   managingTasks = !managingTasks;
@@ -686,7 +830,6 @@ $('delete-dialog').addEventListener('close', async () => {
         tasks.splice(tasks.indexOf(task), 1);
       }
       updateTaskCount();
-      syncGallery();
     }
     managingTasks = false;
     updateTaskCount();
@@ -699,6 +842,12 @@ $('image-dialog').addEventListener('close', () => $('preview-image').removeAttri
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);
+$('prompt').addEventListener('paste', (event) => {
+  const files = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'));
+  if (!files.length) return;
+  event.preventDefault();
+  void addReferenceFiles(files);
+});
 $('add-reference').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];

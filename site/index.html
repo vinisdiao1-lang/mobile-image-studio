@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#edf3fa">
   <meta name="description" content="在手机上用 GPT Image、Gemini 和 Seedream 生成图片。">
   <link rel="icon" href="./icon.svg?v=4" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=9">
+  <link rel="stylesheet" href="./styles.css?v=10">
   <title>密码象 · AI 生图</title>
 </head>
 <body>
@@ -29,9 +29,11 @@
     <section class="result" aria-labelledby="result-title">
       <div class="gallery-heading">
         <div class="section-title"><h1 id="result-title">创作记录</h1><span id="result-badge" role="status">暂无任务</span></div>
-        <div class="gallery-arrows" aria-label="图库翻页">
-          <button id="gallery-prev" type="button" aria-label="上一组图片" aria-controls="gallery" disabled>‹</button>
-          <button id="gallery-next" type="button" aria-label="下一组图片" aria-controls="gallery" disabled>›</button>
+        <div class="gallery-zoom" role="group" aria-label="预览大小">
+          <button id="zoom-out" type="button" aria-label="缩小预览">−</button>
+          <input id="preview-size" type="range" min="50" max="150" step="10" value="100" aria-label="预览图大小">
+          <button id="zoom-in" type="button" aria-label="放大预览">＋</button>
+          <output id="preview-percent" for="preview-size">100%</output>
         </div>
       </div>
       <div class="history-controls">
@@ -40,15 +42,11 @@
         <button id="more-tasks" type="button" hidden>加载更早记录</button>
         <p id="history-note" class="notice" role="status"></p>
       </div>
-      <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可左右滚动">
+      <div id="gallery" class="gallery" tabindex="0" aria-label="创作记录，可上下滚动">
         <div class="empty-card" data-placeholder>
           <span class="empty-icon" aria-hidden="true">✦</span>
           <p>生成的图片会显示在这里</p>
         </div>
-      </div>
-      <div class="gallery-controls" id="gallery-controls" hidden>
-        <input id="gallery-slider" type="range" min="0" max="1" value="0" disabled aria-label="拖动浏览创作记录" aria-controls="gallery">
-        <output id="gallery-position" for="gallery-slider" hidden></output>
       </div>
       <details class="resume">
         <summary>查询已有任务</summary>
@@ -60,7 +58,12 @@
       </details>
     </section>
     <form id="create" class="composer" aria-labelledby="composer-title">
-      <div class="composer-heading"><h2 id="composer-title">图片生成</h2></div>
+      <div class="composer-heading">
+        <h2 id="composer-title">图片生成</h2>
+        <p id="collapsed-prompt" hidden></p>
+        <button id="toggle-composer" type="button" aria-expanded="true" aria-controls="composer-panel">收起输入栏 ⌄</button>
+      </div>
+      <div id="composer-panel">
       <div class="prompt-box">
         <label for="prompt">提示词</label>
         <textarea id="prompt" required maxlength="8000" placeholder="描述主体、构图、光线和想要的风格…"></textarea>
@@ -72,7 +75,7 @@
           <button id="add-reference" type="button" aria-label="添加参考图"><span aria-hidden="true">＋</span> 参考图</button>
           <div class="reference-hints">
             <output id="reference-count" for="reference-files references">0 / 6</output>
-            <span class="drop-hint">可拖入图片</span>
+          <span class="drop-hint">拖入或粘贴图片</span>
           </div>
           <ul id="reference-thumbnails" aria-label="已选参考图" hidden></ul>
         </div>
@@ -94,6 +97,7 @@
         </details>
         <p class="notice" id="form-note" role="status"></p>
       </div>
+      </div>
     </form>
   </main>
   <main id="dashboard-view" class="dashboard-view" hidden>
@@ -114,6 +118,12 @@
       </div>
     </article>
   </template>
+  <div id="task-menu" class="task-menu" role="group" aria-label="图片操作" popover="auto">
+    <button type="button" data-task-action="repeat">重刷</button>
+    <button type="button" data-task-action="reference">添加到参考图</button>
+    <button type="button" data-task-action="copy">复制提示词</button>
+    <button type="button" data-task-action="push">推送到输入框</button>
+  </div>
   <dialog id="delete-dialog" aria-labelledby="delete-title">
     <form method="dialog">
       <div class="panel-heading"><h2 id="delete-title">删除创作记录</h2></div>
@@ -135,6 +145,6 @@
       <div class="dialog-actions"><button id="clear-key" type="button">清除 Key</button><button class="primary" type="submit">使用此 Key</button></div>
     </form>
   </dialog>
-  <script type="module" src="./app.js?v=9"></script>
+  <script type="module" src="./app.js?v=10"></script>
 </body>
 </html>

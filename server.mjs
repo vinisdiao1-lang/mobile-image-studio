@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { creditLabel, generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences, models } from './site/models.js';
-import { createRecord, deleteRecords, history, ownerFor, readImage, readRecord, saveRecord } from './archive.mjs';
+import { createRecord, deleteRecords, history, ownerFor, readImage, readRecipe, readRecord, saveRecord } from './archive.mjs';
 
 const port = Number(process.env.PORT || 4317);
 const pagesOrigin = process.env.PAGES_ORIGIN || 'https://vinisdiao1-lang.github.io';
@@ -206,6 +206,13 @@ async function archiveApi(request, response, path, key, search) {
     if (task.status === 'pending') startPolling(owner, record, task.id, key);
     return send(response, 200, task);
   }
+  if (path === 'history-recipe') {
+    const record = search.get('record');
+    const recipe = recordPattern.test(record) ? readRecipe(owner, record) : null;
+    return recipe
+      ? send(response, 200, recipe)
+      : send(response, 404, { error: '此任务没有保存原始生成参数。' });
+  }
   const match = path.match(/^history-image\/([a-f0-9-]{36})\/(\d{1,2})$/);
   const image = match && readImage(owner, match[1], Number(match[2]));
   if (!image) return send(response, 404, { error: '图片已删除或不存在。' });
@@ -258,7 +265,7 @@ async function api(request, response, path, search) {
     response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   }
   if (request.method === 'GET' && path === 'health') return send(response, 200, { status: 'ok' });
-  const isArchive = ['history', 'history-record', 'history-delete'].includes(path) || path.startsWith('history-image/');
+  const isArchive = ['history', 'history-record', 'history-delete', 'history-recipe'].includes(path) || path.startsWith('history-image/');
   if (!isArchive && !['generate', 'task', 'balance'].includes(path)) return send(response, 404, { error: '接口不存在。' });
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
@@ -292,7 +299,10 @@ async function api(request, response, path, search) {
         if (existing) return send(response, 200, existing);
         const model = models.find((item) => item.id === input.model);
         const settings = model ? [model.name, input.ratio, input.size, creditLabel(model, input.quality)].join(' · ') : '';
-        createRecord(owner, record, null, input.prompt.trim(), settings);
+        const { model: modelId, prompt, ratio, size, quality, references, referenceFiles } = input;
+        createRecord(owner, record, null, prompt.trim(), settings, {
+          model: modelId, prompt, ratio, size, quality, references, referenceFiles,
+        });
       }
     } else {
       if (!isTaskId(input?.id)) throw new Error('请检查任务 ID。');

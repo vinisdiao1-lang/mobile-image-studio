@@ -26,19 +26,23 @@ db.exec(`
     FOREIGN KEY (owner, record) REFERENCES tasks(owner, record) ON DELETE CASCADE
   );
 `);
+if (!db.prepare("SELECT 1 FROM pragma_table_info('tasks') WHERE name='recipe'").get()) {
+  db.exec('ALTER TABLE tasks ADD COLUMN recipe TEXT');
+}
 
 export function ownerFor(key) {
   return createHash('sha256').update(key).digest('hex');
 }
 
-const findTask = db.prepare('SELECT * FROM tasks WHERE owner = ? AND record = ?');
-const insertTask = db.prepare('INSERT OR IGNORE INTO tasks (owner, record, provider, prompt, settings, status, created) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const findTask = db.prepare('SELECT record, provider, prompt, settings, status, sources, error, recipe IS NOT NULL AS repeatable FROM tasks WHERE owner=? AND record=?');
+const insertTask = db.prepare('INSERT OR IGNORE INTO tasks (owner, record, provider, prompt, settings, status, created, recipe) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 const updateTask = db.prepare('UPDATE tasks SET provider = coalesce(?, provider), status = ?, sources = ?, error = ? WHERE owner = ? AND record = ?');
 const imagePositions = db.prepare('SELECT position FROM images WHERE owner = ? AND record = ? ORDER BY position');
 const archiveJobs = new Set();
 const retryAfter = new Map();
 const maxImage = 16 * 1024 * 1024;
 const maxStorage = 8 * 1024 * 1024 * 1024;
+const storageBytes = db.prepare('SELECT (page_count - freelist_count) * page_size AS bytes FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size()');
 const blocked = new BlockList();
 for (const [address, prefix] of [
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -110,7 +114,7 @@ function enqueue(owner, row) {
         if (db.prepare('SELECT 1 FROM images WHERE owner=? AND record=? AND position=?').get(owner, row.record, position)) continue;
         const image = await downloadImage(url, AbortSignal.timeout(12000));
         if (!findTask.get(owner, row.record)) return;
-        const size = db.prepare('SELECT (page_count - freelist_count) * page_size AS bytes FROM pragma_page_count(), pragma_freelist_count(), pragma_page_size()').get().bytes;
+        const size = storageBytes.get().bytes;
         if (size + image.bytes.length > maxStorage) throw new Error('Image storage is full');
         db.prepare('INSERT OR IGNORE INTO images VALUES (?, ?, ?, ?, ?)').run(owner, row.record, position, image.mime, image.bytes);
       }
@@ -137,11 +141,15 @@ export function readRecord(owner, record) {
     : [...positions].map(savedImage);
   if (row.status === 'succeeded' && sources.length) enqueue(owner, row);
   return { record, id: row.provider, prompt: row.prompt, settings: row.settings, status: row.status,
-    images, saving: Boolean(sources.length), error: row.error };
+    images, saving: Boolean(sources.length), error: row.error, repeatable: Boolean(row.repeatable) };
 }
 
+export function readRecipe(owner, record) {
+  const row = db.prepare("SELECT recipe FROM tasks WHERE owner=? AND record=? AND status='succeeded'").get(owner, record);
+  return row?.recipe ? JSON.parse(row.recipe) : null;
+}
 setInterval(() => {
-  const rows = db.prepare("SELECT * FROM tasks WHERE status='succeeded' AND sources<>'[]' ORDER BY created DESC LIMIT 120").all();
+  const rows = db.prepare("SELECT owner, record, sources FROM tasks WHERE status='succeeded' AND sources<>'[]' ORDER BY created DESC LIMIT 120").all();
   for (const row of rows) enqueue(row.owner, row);
 }, 20_000).unref();
 
@@ -151,8 +159,12 @@ export function history(owner, before, record) {
   return { tasks: page.map(({ record }) => readRecord(owner, record)), next: rows.length > 60 ? page.at(-1) : null };
 }
 
-export function createRecord(owner, record, provider, prompt, settings) {
-  insertTask.run(owner, record, provider, prompt, settings, 'pending', Date.now());
+export function createRecord(owner, record, provider, prompt, settings, recipe = null) {
+  const json = recipe && JSON.stringify(recipe);
+  if (json && storageBytes.get().bytes + Buffer.byteLength(json) > maxStorage) {
+    throw new Error('创作记录存储空间不足，请清理后再提交。');
+  }
+  insertTask.run(owner, record, provider, prompt, settings, 'pending', Date.now(), json);
 }
 
 export function saveRecord(owner, record, { id = null, status, images = [], error = '' }) {
