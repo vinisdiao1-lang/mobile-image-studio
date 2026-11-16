@@ -151,24 +151,33 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .panel-heading h2 { font-size: 17px; }
 .dialog-actions { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
-#image-dialog { width: min(900px, calc(100% - 24px)); }
-#preview-image { display: block; width: 100%; max-height: 76vh; object-fit: contain; border-radius: 9px; background: var(--inset); }
 #task-details {
-  inset: 0 0 0 auto;
+  inset: 0;
   margin: 0;
   padding: 0;
-  width: min(100%, clamp(380px, 35vw, 720px));
+  width: 100%;
   max-width: none;
   height: 100dvh;
   max-height: none;
   border: 0;
-  border-left: 1px solid var(--line);
   border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) clamp(380px, 35vw, 720px);
+}
+#task-details[open] { display: grid; }
+#task-details::backdrop { background: #17263b80; }
+.result-stage { display: grid; min-width: 0; min-height: 0; place-items: center; padding: clamp(12px, 3vw, 48px); }
+#preview-image { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+#preview-loading { margin: 0; padding: 10px 16px; border-radius: 10px; background: var(--panel); }
+.details-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
   background: #f1f5fb;
   box-shadow: -6px 0 22px #254e8012;
 }
-#task-details[open] { display: flex; flex-direction: column; }
-#task-details::backdrop { background: #17263b12; }
 .details-header, .details-actions {
   display: flex;
   align-items: center;
@@ -189,6 +198,8 @@ dialog p { color: var(--muted); font-size: 14px; line-height: 1.6; margin-bottom
 .details-actions { flex-wrap: wrap; justify-content: flex-start; border-top: 1px solid var(--line); }
 .details-actions a { color: var(--accent-dark); font-size: 14px; }
 @media (max-width: 660px) {
+  #task-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 44dvh) minmax(0, 1fr); }
+  .details-panel { border-left: 0; }
   .view-switch, .dashboard-view { padding-inline: 12px; }
   .top-inner { min-height: 56px; padding-inline: 13px; }
   .workspace { padding: 10px 12px; gap: 8px; }

@@ -1,4 +1,4 @@
-import { creditLabel, generationRequest, isTaskId, maxReferenceBytes, maxReferences, models, ratios } from './models.js?v=5';
+import { creditLabel, generationRequest, imageUrl, isTaskId, maxReferenceBytes, maxReferences, models, ratios } from './models.js?v=5';
 
 const cloudOrigin = 'https://new.linlangai88.cn';
 const apiPath = '/mobile-image-api/';
@@ -239,13 +239,6 @@ function setPreviewSize(value) {
   $('zoom-in').disabled = percent === 150;
 }
 
-function showPreview(url, alt) {
-  const image = $('preview-image');
-  image.alt = alt;
-  image.src = url;
-  $('image-dialog').showModal();
-}
-
 function updateDetails() {
   const { task, image } = activeDetails;
   const [model, ratio] = task.settings.split(' · ');
@@ -256,11 +249,17 @@ function updateDetails() {
   status.textContent = task.status.textContent;
   status.hidden = !status.textContent;
   const source = image.getAttribute('src');
+  const preview = $('preview-image');
+  preview.alt = image.alt;
+  preview.hidden = !source;
+  $('preview-loading').hidden = Boolean(source);
+  $('preview-loading').textContent = image.dataset.readFailed ? '图片读取失败。' : '正在读取图片…';
+  if (!source) preview.removeAttribute('src');
+  else if (preview.getAttribute('src') !== source) preview.src = source;
   const original = $('details-original');
   if (source) original.href = source;
   else original.removeAttribute('href');
   original.hidden = !source;
-  $('details-preview').disabled = !source;
   $('details-download').disabled = !source;
 }
 
@@ -288,6 +287,37 @@ async function downloadResult({ task, image, index }) {
 
 function referenceLinks() {
   return $('references').value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function pastedImage(data) {
+  const files = [...data.files].filter((file) => file.type.startsWith('image/'));
+  if (files.length) return { files };
+  for (const item of data.items) {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (file) files.push(file);
+  }
+  if (files.length) return { files };
+
+  // Some image apps put only an HTML image tag on the clipboard.
+  const html = data.getData('text/html');
+  if (!html || !/<img\b/i.test(html) || html.length > 12 * 1024 * 1024) return null;
+  const fragment = document.createElement('template');
+  fragment.innerHTML = html;
+  const images = fragment.content.querySelectorAll('img[src]');
+  if (images.length !== 1 || fragment.content.textContent.trim()) return null;
+  const source = images[0].getAttribute('src');
+  const inline = source.match(/^data:(image\/(?:png|jpeg|gif|webp|avif|bmp|tiff));base64,([A-Za-z0-9+/=]+)$/i);
+  if (inline) {
+    try {
+      const bytes = Uint8Array.from(atob(inline[2]), (char) => char.charCodeAt(0));
+      return { files: [new File([bytes], '粘贴的图片', { type: inline[1] })] };
+    } catch {
+      return null;
+    }
+  }
+  const url = imageUrl(source);
+  return url ? { url } : null;
 }
 
 function updateReferences() {
@@ -591,10 +621,8 @@ function imageCardParts(task, url, index, currentKey) {
       download.disabled = false;
       if (activeDetails?.image === image) updateDetails();
     }).catch(() => {
-      if (activeDetails?.image === image) {
-        $('details-status').textContent = '图片读取失败。';
-        $('details-status').hidden = false;
-      }
+      image.dataset.readFailed = 'true';
+      if (activeDetails?.image === image) updateDetails();
     }));
     imageObserver.observe(image);
   }
@@ -861,18 +889,14 @@ $('delete-dialog').addEventListener('close', async () => {
     if (currentKey === key) $('history-note').textContent = '暂时无法删除所选记录，请重试。';
   }
 });
-$('close-preview').addEventListener('click', () => $('image-dialog').close());
-$('image-dialog').addEventListener('close', () => $('preview-image').removeAttribute('src'));
 $('close-details').addEventListener('click', () => taskDetails.close());
 taskDetails.addEventListener('click', (event) => {
-  if (event.target === taskDetails && event.clientX < taskDetails.getBoundingClientRect().left) taskDetails.close();
+  if (event.target.classList.contains('result-stage')) taskDetails.close();
 });
 taskDetails.addEventListener('close', () => {
-  if (!taskDetails.open) activeDetails = undefined;
-});
-$('details-preview').addEventListener('click', () => {
-  const image = activeDetails?.image;
-  if (image?.getAttribute('src')) showPreview(image.src, image.alt);
+  if (taskDetails.open) return;
+  activeDetails = undefined;
+  $('preview-image').removeAttribute('src');
 });
 $('details-download').addEventListener('click', async (event) => {
   const details = activeDetails;
@@ -890,12 +914,29 @@ $('details-download').addEventListener('click', async (event) => {
 $('model').addEventListener('change', syncModel);
 $('quality').addEventListener('change', syncCredits);
 $('prompt').addEventListener('input', syncPrompt);
-$('prompt').addEventListener('paste', (event) => {
-  const files = [...(event.clipboardData?.files ?? [])].filter((file) => file.type.startsWith('image/'));
-  if (!files.length) return;
+document.addEventListener('paste', (event) => {
+  if (!event.clipboardData) return;
+  const pasted = pastedImage(event.clipboardData);
+  if (!pasted) return;
   event.preventDefault();
-  void addReferenceFiles(files);
-});
+  if ($('studio-view').hidden) switchView(false);
+  toggleComposer(true);
+  if (taskDetails.open) taskDetails.close();
+  if (pasted.files) {
+    void addReferenceFiles(pasted.files);
+    return;
+  }
+  const links = referenceLinks();
+  if (referenceFiles.length + links.length >= maxReferences) {
+    $('reference-note').textContent = '参考图最多 6 张，含图片链接。';
+    return;
+  }
+  const references = $('references');
+  references.value = [...links, pasted.url].join('\n');
+  references.closest('details').open = true;
+  $('reference-note').textContent = '';
+  updateReferences();
+}, { capture: true });
 $('add-reference').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => {
   const files = [...fileInput.files];
